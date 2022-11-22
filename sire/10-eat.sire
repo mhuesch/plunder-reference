@@ -1,0 +1,65 @@
+"""
+""" Either
+""" ======
+"""
+""" This implements the `Either` datatype.
+"""
+"""     data Either a b = LEFT a | RIGHT b
+"""
+
+
+""" Imports """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+/+  "01-fan"  [car cdr I K die]
+/+  "02-bit"  [if]
+/+  "03-nat"  [inc dec]
+/+  "04-app"  []
+/+  "05-eql"  []
+/+  "06-may"  []
+/+  "07-row"  []
+/+  "08-pin"  []
+/+  "09-lis"  []
+
+
+""" Definitions """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+= (LEFT x)  (0 x)
+= (RIGHT x) (1 x)
+
+(eitherCase x l r)=(if (car x) (! r cdr-x) (! l cdr-x))
+
+(fromRight l x)=(! eitherCase x l I)
+
+(eitherCaseLeft x r l)=(if (car x) (! r cdr-x) (! l cdr-x))
+
+(eitherOpen x r)=(! eitherCase x _&x r)
+
+(eitherOpenLeft x l)=(! eitherCase x l _&x)
+
+(fromLeft r x)=(! eitherCase x I r)
+
+(eitherGetRight x k)=(! eitherCase x _&x k)
+
+(eitherGetLeft x k)=(! eitherCase x k _&x)
+
+(eitherMap f val)=(! eitherCase val 0 (x & 1 f-x))
+
+
+""" Tests """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+?? eitherCase RIGHT-0 K-0 inc
+?? eitherCase RIGHT-1 K-0 I
+?? eitherCase RIGHT-2 K-0 dec
+?? eitherCase LEFT-9  K-1 die
+?? eitherCase LEFT-1  I   die
+?? eitherCase LEFT-0  inc die
+
+
+""" Exports """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+^-^ LEFT RIGHT
+^-^ fromLeft fromRight
+^-^ eitherCase eitherOpen
+^-^ eitherOpenLeft eitherCaseLeft
+^-^ eitherGetRight eitherGetLeft
+^-^ eitherMap

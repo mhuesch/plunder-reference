@@ -1,10 +1,6 @@
-/+  bool     (if)
-/+  row      (idx len weld)
-/+  eql      (eql neq)
-/+  either   (LEFT RIGHT)
-/+  macro    (HEIR NODE isWord)
-/+  openRow  ("#openRow" isOpenRowExp)
-/+  openTab  ("#openTab" isOpenTabExp)
+/+  boot
+/+  openRow  ["#openRow" isOpenRowExp]
+/+  openTab  ["#openTab" isOpenTabExp]
 
 
 ;;;;;;;;;;;;;;;;;
@@ -13,18 +9,15 @@
 
 = ("*" env tab kids heir)
 @ rex (HEIR "*" kids heir)
-| if
-      | isOpenTabExp rex
-   | $"#openTab" env tab kids heir
-| if
-      | isOpenRowExp rex
-   | $"#openRow" env tab kids heir
-| if
-      | isWord idx-0-kids
-   @ kids (weld kids (if eql-0-heir [] [heir]))
-   | if (neq 3 len-kids)
+| if (isOpenTabExp rex)
+    | $"#openTab" env tab kids heir
+| if (isOpenRowExp rex)
+    | $"#openRow" env tab kids heir
+| if (isWord idx-0-kids)
+    @ kids (weld kids (if eql-0-heir [] [heir]))
+    | if (neq 3 len-kids)
       LEFT-[rex "Expected three parameters"]
-   | RIGHT 0,(NODE "@" kids)
+    | RIGHT 0,(NODE "@" kids)
 | LEFT-[rex "Unrecognized binding pattern"]
 
 
@@ -32,16 +25,13 @@
 ;; Tests ;;
 ;;;;;;;;;;;
 
-/+  nat  (add)
-/+  eql  (eql)
+?? eql 7
+   * [x y z] [3 4]
+   | (add x (add y z))
 
-??  eql 7
- * [x y z] [3 4]
- | (add x (add y z))
-
-??  eql 7
- * %[=x =y =z] %[y=4 z=3]
- | (add x (add y z))
+?? eql 7
+   * %[=x =y =z] %[y=4 z=3]
+   | (add x (add y z))
 
 
 ;;;;;;;;;;;;;

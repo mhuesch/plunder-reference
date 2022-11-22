@@ -1,0 +1,447 @@
+/+  boot
+/+  switch  ["#switch"]
+/+  tar     ["*"]
+
+
+;; Kernel State ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;; State =
+;;;     ( Row Thread
+;;;     , Row Request
+;;;     , Nat
+;;;     , List Nat
+;;;     , Row Any
+;;;     , Nat
+;;;     , List Nat
+;;;     )
+= emptyState ([], [], 0, %[], [], 0, %[])
+
+(getThreadsRow st)=(idx 0 st)
+(setThreadsRow val st)=(mut 0 val st)
+(putThreadsRow st val)=(mut 0 val st)
+(modifyThreadsRow f st)=(| putThreadsRow st | f | getThreadsRow st)
+(getThread key st)=(idx key (getThreadsRow st))
+(setThread key val st)=(modifyThreadsRow (mut key val) st)
+
+(getRequestsRow st)=(idx 1 st)
+(setRequestsRow val st)=(mut 1 val st)
+(putRequestsRow st val)=(mut 1 val st)
+(modifyRequestsRow f st)=(| putRequestsRow st | f | getRequestsRow st)
+(getRequest key st)=(idx key (getRequestsRow st))
+(setRequest key val st)=(modifyRequestsRow (mut key val) st)
+
+(getIORefsRow st)=(idx 4 st)
+(setIORefsRow val st)=(mut 4 val st)
+(putIORefsRow st val)=(mut 4 val st)
+(modifyIORefsRow f st)=(| putIORefsRow st | f | getIORefsRow st)
+(getIORef key st)=(idx key (getIORefsRow st))
+(setIORef key val st)=(modifyIORefsRow (mut key val) st)
+
+
+;; Core Thread Operations ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+; {allocateThread : State -> (State, ThreadId)}
+= (allocateThread st)
+* [threads requests next free vars nextVar freeVars] st
+| ifNot (cabIsEmpty free)
+    * f,fs (cabPop free)
+    | ([threads requests next fs vars nextVar freeVars], f)
+@ newNext  (inc next)
+@ threads  (weld threads [0])
+@ requests (weld requests [0])
+| ([threads requests newNext free vars nextVar freeVars], next)
+
+; {freeThread : ThreadId -> State -> State}
+= (freeThread tid st)
+; trk %freeThread,(%[=tid]),(%[=st])
+* [threads requests next free vars nextVar freeVars] st
+@ threads  (put threads tid 0)
+@ requests (put requests tid 0)
+@ free     (cabIns tid free)
+| [threads requests next free vars nextVar freeVars]
+
+; {allocateIORef : Any -> State -> (State, IORef Any)}
+= (allocateIORef val st)
+* [threads requests next free vars nextVar freeVars] st
+| ifNot (cabIsEmpty freeVars)
+    * v,vs (cabPop free)
+    @ vars (put vars v val)
+    @ st [threads requests next free vars nextVar vs]
+    | (st, v)
+@ newNext (inc nextVar)
+@ vars    (weld vars [val])
+@ st      [threads requests next free vars newNext freeVars]
+| (st, nextVar)
+
+; {releaseIORef :: IORef a -> State -> State}
+= (releaseIORef var st)
+* [threads requests next free vars nextVar freeVars] st
+@ vars     (put vars var 0)
+@ freeVars (cabIns var freeVars)
+| [threads requests next free vars nextVar freeVars]
+
+
+;; An IO Action is a state transition function that closes over a
+;; ThreadID.
+;;
+;; A Thread is always tied to a slot in the requests table and a slot
+;; in the continuation vector.
+;;
+;; When a thread wants to perform IO, it writes the request to it's
+;; request slot, and it's continuation to the continuation vector.
+;;
+;; To create a new thread or cancel an existing thread, the thread
+;; function simply updates the state to have a new thread, or to no
+;; longer have an existing thread.  Similarly, a thread can terminate
+;; itself by deleting itself from the state.
+;;
+;; Action = (ThreadId -> State -> State)
+;; Thread = Response -> Action
+;; Effect = Thread -> Action
+;;
+
+; {nullThread :: Thread}
+(nullThread _resp tid st)=(freeThread tid st)
+
+(pure val k t s)=(k val t s)
+(getThreadId k t s)=(k t t s)
+(getState k t s)=(k s t s)
+
+; {fork :: IO a -> IO ThreadId}
+= (fork act k tid st)
+* st,newTid | allocateThread st
+* st        | act nullThread newTid st
+| k newTid tid st
+
+; {newIORef :: a -> IO (IORef a)}
+= (newIORef val k tid st)
+* st,var (allocateIORef val st)
+| trk %newIORef,var,val
+| k var tid st
+
+; {readIORef :: IORef a -> IO a}
+= (readIORef var k tid st)
+@ val (getIORef var st)
+| trk %readIORef,var,val
+| k val tid st
+
+; {writeIORef :: IORef a -> a -> IO ()}
+= (writeIORef var val k tid st)
+| trk %writeIORef,var,val
+@ st (setIORef var val st)
+| k 0 tid st
+
+; {modifyIORef :: IORef a -> (a -> a) -> a -> IO ()}
+= (modifyIORef var fun k tid st)
+| trk %modifyIORef,var,fun
+@ val (fun (getIORef var st))
+| seq val
+@ st (setIORef var val st)
+| k 0 tid st
+
+; {freeIORef :: IORef a -> IO ()}
+= (freeIORef var k tid st)
+@ st (releaseIORef var st)
+| k 0 tid st
+
+;;;
+;;; TODO Testing
+;;;
+;;; {cancel :: ThreadId -> IO ()}
+= (cancel targetThread k me st)
+| if (eql targetThread me)
+    | freeThread me st
+| k 0 me (freeThread targetThread st)
+
+;;;
+;;; TODO Testing
+;;;
+;;; {exit :: IO a}
+(exit k me st)=(cancel me k me st)
+
+
+; andThen : IO a -> IO b -> IO b
+= (andThen x y k)
+: xr <- x
+: yr <- y
+| k yr
+
+; bindIO : IO a -> (a -> IO b) -> IO b
+= (bindIO x y k)
+: xr <- x
+: yr <- y xr
+| k yr
+
+= (foreverCycle act resp tid st)
+| act (mkPin-foreverCycle act) tid st
+
+; forever : IO a -> IO b
+(forever act k tid st)=(foreverCycle act 0 tid st)
+
+= (">>" e n kids heir)
+| if (neq 0 heir) LEFT-"unexpected heir"
+# switch (len kids)
+= 0 | LEFT "Expected node to have at least two kids"
+= 1 | LEFT "Expected node to have at least two kids"
+= 2 * fst,snd kids
+    | RIGHT [0 (appE [cnsE-andThen fst snd])]
+= _ : result <- eitherOpen ($">>" e n (drop 1 kids) 0)
+    * _,rest result
+    | RIGHT [0 (appE [cnsE-andThen idx-0-kids rest])]
+
+= (">>=" e n kids heir)
+| if (neq 0 heir) LEFT-"unexpected heir"
+# switch (len kids)
+= 0 | LEFT "Expected node to have at least two kids"
+= 1 | LEFT "Expected node to have at least two kids"
+= 2 * fst,snd kids
+    | RIGHT [0 (appE [cnsE-bindIO fst snd])]
+= _ : result <- eitherOpen ($">>=" e n (drop 1 kids) 0)
+    * _,rest result
+    | RIGHT [0 (appE [cnsE-bindIO idx-0-kids rest])]
+
+= (ioLoop st lastRequests tid response)
+@ exe (getThread tid st)
+| if (eql 0 exe)
+    | trk %FINAL_STATE,st
+    | die "Impossible: response does not match any thread"
+@ st_ (exe response tid st)
+; trk %[requests=(getRequestsRow st_)]
+| mkPin ioLoop st_ (getRequestsRow st_)
+
+; newMachine :: IO a -> Machine
+= (newMachine act)
+; trk (%newMachine),act
+* st,tid (allocateThread emptyState)
+* st     (act nullThread tid st)
+; trk %[=st]
+; trk %[requests=(getRequestsRow st)]
+| ioLoop st (getRequestsRow st)
+
+
+;; IO Operations ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(performIO req exe tid st)=(setThread tid exe)(setRequest tid req)(st)
+
+;
+; TODO this (... k t s) boilerplate is not neccesary, but makes
+; dissasembled code more readble.  Consider getting rid of it later.
+;
+= (evaluate time f x k t s) | performIO [0 time f x]  k t s
+= (getRandomBytes x k t s)  | performIO [1 0 x]       k t s
+= (serveFiles ss k t s)     | performIO [2 0 ss]      k t s
+= (telnetOpen k t s)        | performIO [3 0 0]       k t s
+= (telnetKill h k t s)      | performIO [3 0 [1 h]]   k t s
+= (telnetWait h k t s)      | performIO [3 0 [2 h]]   k t s
+= (telnetRecv h k t s)      | performIO [3 0 [3 h]]   k t s
+= (telnetSend h b k t s)    | performIO [3 0 [4 h b]] k t s
+= (webSocketOpen k t s)     | performIO [4 0 0]       k t s
+= (webSocketKill h k t s)   | performIO [4 0 [1 h]]   k t s
+= (webSocketWait h k t s)   | performIO [4 0 [2 h]]   k t s
+= (webSocketRecv h k t s)   | performIO [4 0 [3 h]]   k t s
+= (webSocketSend h b k t s) | performIO [4 0 [4 h b]] k t s
+= (getCurrentTime k t s)    | performIO [5 0 0]       k t s
+= (waitUntil x k t s)       | performIO [5 0 x]       k t s
+= (sireNewPort k t s)       | performIO [6 0 []]      k t s
+= (recvOnPort m w k t s)    | performIO [6 0 [m w]]   k t s
+= (sendOnPort m u b k t s)  | performIO [6 0 [m u b]] k t s
+
+; (getRandomBytes x k t s)  | performIO [0 0 x] k t s
+; (getCurrentTime k t s)    | performIO [0 4 0] k t s
+; (waitUntil x k t s)       | performIO [0 4 x] k t s
+; (telnetOpen k t s)        | performIO [0 2 0] k t s
+; (serveFiles ss k t s)     | performIO [0 1 ss] k t s
+; (telnetKill h k t s)      | performIO [0 2 [1 h]] k t s
+; (telnetWait h k t s)      | performIO [0 2 [2 h]] k t s
+; (telnetRecv h k t s)      | performIO [0 2 [3 h]] k t s
+; (telnetSend h b k t s)    | performIO [0 2 [4 h b]] k t s
+; (webSocketOpen k t s)     | performIO [0 3 0] k t s
+; (webSocketKill h k t s)   | performIO [0 3 [1 h]] k t s
+; (webSocketWait h k t s)   | performIO [0 3 [2 h]] k t s
+; (webSocketRecv h k t s)   | performIO [0 3 [3 h]] k t s
+; (webSocketSend h b k t s) | performIO [0 3 [4 h b]] k t s
+
+;;;
+;;; `yield` manually executes another thread.  That thread
+;;; must be in a state where it is expecting to be
+;;; explicitly yielded to (waiting to read from or write
+;;; to an MVar)
+;;;
+;;; First we fetch `targetThread` from the kernel state.
+;;;
+;;;    targetThread : Thread
+;;;    targetThread : Any -> Action
+;;;    targetThread : Any -> ThreadId -> State -> State
+;;;
+;;; Then we run this function, allowing it to update
+;;; the state.  It will replace it's request/continuation
+;;; with the appropriate things.
+;;;
+;;; Then we resume our normal execution on the current
+;;; thread by invoking `return` as usual.
+;;;
+;;; `block` is the opposite.  It clears the IO request slot
+;;; for this thread and causes the thread to be explicitly
+;;; resumed via `yield`.
+;;;
+
+; yield : ThreadId -> Any -> IO ()
+= (yield targetThreadId val return ourThreadId st)
+@ targetThread (getThread targetThreadId st)
+@ st (targetThread val targetThreadId st)
+| seq st
+| return 0 ourThreadId st
+
+; block : IO a
+= (block return tid st)
+| setRequest tid 0
+| setThread tid return
+| st
+
+
+;; MVars ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;; data MVar a
+;;;   | Full a (Tab ThreadId a)  ;;  Value + Pending writes
+;;;   | Empty (Cab ThreadId)     ;;  Pending reads
+
+(MVAR_FULL val writers)=[0 val writers]
+
+(MVAR_EMPTY readers)=[1 readers]
+
+= (mvarCase var full empty)
+# switch (idx 0 var)
+= 0 (! full (idx 1 var) (idx 2 var))
+= 1 (! empty (idx 1 var))
+
+= (newMVar val return)
+: var <- newIORef (MVAR_FULL val %[])
+| return var
+
+= (newEmptyMVar return)
+: var <- newIORef (MVAR_EMPTY %[])
+| return var
+
+= (putMVar var val return)
+: mvarSt <- readIORef var
+| trk %putMVar,var,mvarSt
+! mvarCase mvarSt
+    & (existingVal writers)
+    : tid <- getThreadId
+    @ newMVarState (MVAR_FULL existingVal (tabPut writers tid val))
+    : _ <- writeIORef var newMVarState
+    : _ <- block
+    | return 0
+& readers
+| if (cabIsEmpty readers)
+    : _ <- writeIORef var (MVAR_FULL val %[])
+    | return 0
+* r,rs (cabPop readers)
+| trk %PUT,readers,r,rs
+: _ <- writeIORef var (MVAR_EMPTY rs)
+: _ <- yield r val
+| return 0
+
+= (takeMVar var return)
+: mvarSt <- readIORef var
+| trk %takeMVar,var,mvarSt
+! mvarCase mvarSt
+    & (existingVal writers)
+    | if (tabIsEmpty writers)
+        : _ <- writeIORef var (MVAR_EMPTY %[])
+        | return existingVal
+    * [writerThreadId writerVal moreWriters]
+        (tabPop writers)
+    : _ <- writeIORef (MVAR_FULL existingVal moreWriters)
+    | yield writerThreadId 0
+    | return existingVal
+& readers
+: me <- getThreadId
+: _  <- writeIORef var (MVAR_EMPTY (cabIns me readers))
+: rs <- block
+| return rs
+
+
+;; Looping ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+= (forList_ list f return)
+: (x xs) <- listCase list (return 0)
+: _      <- f x
+| forList_ xs f return
+
+(for_ row f return)=(forList_ (listFromRow row) f return)
+(forCab_ cab f return)=(! for_ (cabRow cab) f return)
+(traverseList_ f cab return)=(forList_ cab f return)
+(traverse_ f cab return)=(! for_ cab f return)
+(traverseCab_ f cab return)=(! forCab_ cab f return)
+
+= (forList list f return)
+: (x xs) <- listCase list (return 0)
+: r      <- f x
+: rs     <- forList xs f
+| return (CONS r rs)
+
+(traverseList f cab return)=(forList cab f return)
+
+= (for row f return)
+: res <- forList (listFromRow row) f
+| return (listToRow res)
+
+(traverse f cab return)=(! for cab f return)
+
+
+;; Concurency ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+; concurrently : IO a -> IO b -> IO (a, b)
+= (concurrently x y return)
+: xMVar   <- newEmptyMVar
+: yMVar   <- newEmptyMVar
+: xThread <- fork (x >>= putMVar xMVar)
+| trk %[=xThread]
+: yThread <- fork (y >>= putMVar yMVar)
+| trk %[=yThread]
+: xVal    <- takeMVar xMVar
+| trk %[=xVal]
+: yVal    <- takeMVar yMVar
+| trk %[=yVal]
+| return [xVal yVal]
+
+; mapConcurrently : (a -> IO b) -> Row a -> IO (Row b)
+= (mapConcurrently f xs return)
+: pending <- for xs & (x return)
+                    : xMVar   <- newEmptyMVar
+                    : xThread <- fork (f x >>= putMVar xMVar)
+                    | return xMVar
+: results <- for pending takeMVar
+| return results
+
+; forConcurrently : Row a -> (a -> IO b) -> IO (Row b)
+(forConcurrently xs f return)=(! mapConcurrently f xs return)
+
+
+;; Exports ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+^-^ getRandomBytes getCurrentTime waitUntil
+^-^ pure andThen ">>" forever
+^-^ exit cancel fork
+^-^ getThreadId getState
+^-^ newMachine
+^-^
+^-^ getRandomBytes
+^-^ getCurrentTime waitUntil
+^-^
+^-^ sireNewPort recvOnPort sendOnPort
+^-^
+^-^ serveFiles
+^-^ telnetOpen telnetKill telnetWait telnetRecv telnetSend
+^-^ webSocketOpen webSocketKill webSocketWait webSocketRecv webSocketSend
+^-^ newIORef freeIORef readIORef writeIORef modifyIORef
+^-^
+^-^ newMVar newEmptyMVar putMVar takeMVar
+^-^
+^-^ block yield
+^-^
+^-^ concurrently mapConcurrently forConcurrently
+^-^
+^-^ for  traverse  forList  traverseList
+^-^ for_ traverse_ forList_ traverseList_ forCab_ traverseCab_

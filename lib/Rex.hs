@@ -35,7 +35,7 @@ isConsole =
         Nothing -> pure False
         Just _  -> pure True
 
-colorsOnlyInTerminal :: (RexColor => IO ()) -> IO ()
+colorsOnlyInTerminal :: (RexColor => IO a) -> IO a
 colorsOnlyInTerminal act = do
     colors <- isConsole <&> bool NoColors BoldColors
     (let ?rexColors = colors in act)

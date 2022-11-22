@@ -86,8 +86,8 @@ limitations that motivated this work:
     language.
 
 -   "Urbit is not a darknet project".  In practice that means that you
-    depend on cloud hosing, or your home IP becomes public.  Plunder *is*
-    a darknet project.
+    depend on cloud hosting, or your home IP becomes public.  Plunder
+    *is* a darknet project.
 
     Plunder will run primarily over I2P.  But will eventually support
     a wide range of networking transports.  You should be able to use
@@ -341,16 +341,19 @@ code optimization.
 You will need to install `liblmdb` and Haskell's `stack` in order to
 build this.
 
-    $ stack install --fast
-    $ sire tests/laws.sire
+    $ sh/multi-demo
 
 To understand the system you should start by reading
-[laws.sire](tests/laws.sire).  It starts by giving a brief explanation of
-all of the technologies involved, and then proceeds to bootstrap the
-whole world from scratch: from the low level formalism, it builds up
-natural number math, data structure definitions, and even the BLAKE3 hash
-function. The rest of this document will give examples using the
-environment defined in `tests/laws.sire`, explaining the why and how.
+[SIRE.md](doc/SIRE.md) and then reading through the files in the
+[sire](sire/) directory.  Especially the [01-fan.sire](sire/01-fan.sire),
+[02-bit.sire](sire/02-bit.sire), etc.  That sequence of files bootstraps
+the the entire world essentially from scratch.
+
+Starting with just the low-level Fan formalism, it builds up natural
+number math, data structure definitions, the BLAKE3 hash function,
+serialization, JSON parsing and printing, etc. The rest of this document
+will give examples using the environment defined in `tests/laws.sire`,
+explaining the why and how.
 
 
 The Plunder System
@@ -428,7 +431,7 @@ The code run on user's computers then changes, to add unused features
 or to be even more user hostile, and being open source is not a defense
 against this. Product designers usually deride any complaints about this
 process as "change aversion". But aversion to these changes is correct:
-changes are an externally that product managers and designers force on
+changes are an externality that product managers and designers force on
 users, where change often makes the product worse for the user, while
 the product manager or engineer can reap the benefits by Demonstrating
 Impact to a promotion committee.

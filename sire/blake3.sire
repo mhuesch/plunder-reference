@@ -1,18 +1,6 @@
-/+  apply
-/+  bool
-/+  combo
-/+  either
-/+  eql
-/+  list
-/+  list_core
-/+  maybe
-/+  nat
-/+  prim
-/+  row
-/+  tab
+/+  boot
 /+  w32
-/+  tar ("*")
-/+  hax ("#")
+/+  tar ["*"]
 
 
 ;;;;;;;;;;;;;;;;;
@@ -83,7 +71,7 @@ st
 
 ; welds up to four u8.
 = (u32weld v)
-| if (not | aeq len-v 4)
+| ifNot (aeq len-v 4)
     | die "u32weld requires 4 bytes"
 | u8weld get-v-0
 | u8weld get-v-1
@@ -100,30 +88,36 @@ st
 | if (eql j wid) acc
 @ next (add i 4)
 | loop next inc-j
-| acc | u32weld | splice bv i next
+| acc | u32weld | slice bv i next
+
+; Row W8 > Row W32
+= (bytesToWords bv)
+| if (mod len-bv 4)
+    | die "byte-row length not a multiple of 4"
+@ wid (div len-bv 4)
+| gen wid
+& j
+@ i (mul j 4)
+| u32weld (slice bv i (add i 4))
 
 ; breaks a nat that represents a word into
 ; its little-endian component bytes
-= (wordToBytes a)
-. 0 a (mkRow 4)
-? (go i a acc)
-| if (eql i 4) acc
-| go inc-i (rsh a 8) | acc | dis 0xff a
+(wordToBytes a)=(gen 4 i&(dis 0xff (rsh a (mul 8 i))))
 
 ; Little Endian Byte order
 ; (Row W32 > Row W8)
 = (wordsToBytes wv)
-| concat (map wordToBytes wv)
+| catMap wordToBytes wv
 
 ; > (V8 u32, V16 u32, u64, u32, u32)
 ; > V16 u32
 = (b3Compress tupl)
-*     , chainingValue ;; TODO Support `,,` in patterns.
-        blockWords
-        counter
-        blockLen
-        flags
-   | tupl
+*       , chainingValue ;; TODO Support `,,` in patterns in `*` macro.
+          blockWords
+          counter
+          blockLen
+          flags
+    | tupl
 @ st ,, (get chainingValue 0)
      ,, (get chainingValue 1)
      ,, (get chainingValue 2)
@@ -158,7 +152,7 @@ st
 . 0 st
 ? (loop i st)
 | if (eql i 8)
-   st
+  st
 @ st | put st i
      | xor32 (get st (add i 8))
      | get st i
@@ -167,7 +161,7 @@ st
      | get chainingValue i
 | loop inc-i st
 
-(first8words v)=(splice v 0 8)
+(first8words v)=(slice v 0 8)
 
 = | b3OutputNew
     inChain
@@ -198,23 +192,23 @@ st
 @ wid
     | div (roundUp outSize outChunkLen)
           outChunkLen
-| concat
+| cat
 . 0 outSize (mkRow wid)
 ? (loop outputBlockCounter remBytes acc)
 | if (eql outputBlockCounter wid) acc
 @ words | b3Compress
-        ,, b3OutputGetInputChainingValue o
-        ,, b3OutputGetBlockWords o
-        ,, outputBlockCounter
-        ,, b3OutputGetBlockLen o
-        ,, or32 b3OutputGetFlags-o b3Root
+       ,, b3OutputGetInputChainingValue o
+       ,, b3OutputGetBlockWords o
+       ,, outputBlockCounter
+       ,, b3OutputGetBlockLen o
+       ,, or32 b3OutputGetFlags-o b3Root
 @ need | min outChunkLen remBytes
 @ segm | take need
        | wordsToBytes words
 | loop
-   (inc outputBlockCounter)
-   (sub remBytes need)
-   (acc segm)
+  (inc outputBlockCounter)
+  (sub remBytes need)
+  (acc segm)
 
 ; = ChunkState
 ; , chainingVal
@@ -240,7 +234,7 @@ st
 = (b3ChunkstNew keyWords chunkCounter flags)
 ,, keyWords
 ,, chunkCounter
-,, replicate 0 b3BlockLen
+,, rep 0 b3BlockLen
 ,, 0
 ,, 0
 ,, flags
@@ -255,51 +249,51 @@ st
      b3ChunkStart
      0
 
-; /(Chunk > Row u8 > Chunk)
+; b3ChunkstUpdate/(Chunk -> Row u8 -> Chunk)
 = (b3ChunkstUpdate c input)
-| if (eql len-input 0) c
-@ c | if (neq b3BlockLen b3ChunkstGetBlockLen-c)
-      | c
-    ; If the block buffer is full, compress
-    ; it and clear it.
+| if (eql (len input) 0) c
+@ c | if (| neq b3BlockLen | b3ChunkstGetBlockLen c)
+      c
+  """ If the block buffer is full, compress
+  """ it and clear it.
     @ blockWords
         | bytesToWords
         | b3ChunkstGetBlock c
     @ c | b3ChunkstPutChainingVal c
         | first8words
         | b3Compress
-        ,, b3ChunkstGetChainingVal c
-        ,, blockWords
-        ,, b3ChunkstGetChunkCounter c
-        ,, b3BlockLen
-        ,, or32 b3ChunkstGetFlags-c
-                b3ChunkstStartFlag-c
+       ,, b3ChunkstGetChainingVal c
+       ,, blockWords
+       ,, b3ChunkstGetChunkCounter c
+       ,, b3BlockLen
+       ,, or32 (b3ChunkstGetFlags c)
+               (b3ChunkstStartFlag c)
     @ c | b3ChunkstPutBlocksCompressed c
-        | inc b3ChunkstGetBlocksCompressed-c
+        | inc (b3ChunkstGetBlocksCompressed c)
     @ c | b3ChunkstPutBlock c
-        | replicate 0 b3BlockLen
+        | rep 0 b3BlockLen
     @ c | b3ChunkstPutBlockLen c 0
     c
-@ want | sub b3BlockLen b3ChunkstGetBlockLen-c
-@ need | min want len-input
+@ want | sub b3BlockLen (b3ChunkstGetBlockLen c)
+@ need | min want (len input)
 @ c | b3ChunkstPutBlock c
     | weld (take need input)
-    | drop need b3ChunkstGetBlock-c
+    | drop need (b3ChunkstGetBlock c)
 @ c | b3ChunkstPutBlockLen c
-    | add b3ChunkstGetBlockLen-c need
-| b3ChunkstUpdate c drop-need-input
+    | add (b3ChunkstGetBlockLen c) need
+| b3ChunkstUpdate c (drop need input)
 
 = (b3ChunkstOutput c)
 @ blockWords
-   | bytesToWords b3ChunkstGetBlock-c
+    | bytesToWords b3ChunkstGetBlock-c
 | b3OutputNew
-   b3ChunkstGetChainingVal-c
-   blockWords
-   b3ChunkstGetChunkCounter-c
-   b3ChunkstGetBlockLen-c
+  b3ChunkstGetChainingVal-c
+  blockWords
+  b3ChunkstGetChunkCounter-c
+  b3ChunkstGetBlockLen-c
 | or32
-   (or32 b3ChunkstGetFlags-c b3ChunkstStartFlag-c)
-   b3ChunkEnd
+  (or32 b3ChunkstGetFlags-c b3ChunkstStartFlag-c)
+  b3ChunkEnd
 
 = | b3ParentOutput
     lChildCv
@@ -310,19 +304,19 @@ st
     | weld (take 8 lChildCv)
            (take 8 rChildCv)
 | b3OutputNew
-   keyWords
-   blockWords
-   0
-   b3BlockLen
-   (or32 b3Parent flags)
+  keyWords
+  blockWords
+  0
+  b3BlockLen
+  (or32 b3Parent flags)
 
 = (b3ParentCv lChildCv rChildCv keyWords flags)
 | b3OutputChainingValue
 | b3ParentOutput
-   lChildCv
-   rChildCv
-   keyWords
-   flags
+  lChildCv
+  rChildCv
+  keyWords
+  flags
 
 ; (Modifying cvStack,cvStackLen to just use
 ; a list in this port.)
@@ -342,7 +336,7 @@ st
 (b3HasherPutCvStack h cv)=(put h 2 cv)
 
 = (b3HasherNewInternal keyWords flags)
-| if not(eql 8 | len keyWords)
+| ifNot (eql 8 len-keyWords)
     | die "Incorrect length of keyWords"
 ,, b3ChunkstNew keyWords 0 flags
 ,, keyWords
@@ -362,8 +356,8 @@ st
 ; (hashState > [cv hashState])
 = (b3HasherPopStack hSt)
 ! listCase (b3HasherGetCvStack hSt)
-   | die """Trying to pop empty stack
-& {! top res}
+    | die """Trying to pop empty stack
+& (! top res)
 | (top, b3HasherPutCvStack hSt res)
 
 ; "Section 5.1.2 of the blake3 spec explains
@@ -436,17 +430,26 @@ st
   | b3OutputRootOutputBytes output outHashSize
 & (top res)
 @ output
-   | b3ParentOutput
-     top
-     output.b3OutputChainingValue
-     h.b3HasherGetKeyWords
-     h.b3HasherGetFlags
+    | b3ParentOutput
+      top
+      output.b3OutputChainingValue
+      h.b3HasherGetKeyWords
+      h.b3HasherGetFlags
 | go output res
 
 ; One-function convenience method that
 ; handles entire operation for one row.
 (blake3 v)=(b3Finalize b3HasherUpdate-b3HasherNew-v 32)
 
+
+;;;;;;;;;;;
+;; Tests ;;
+;;;;;;;;;;;
+
+?? eql  | barCat
+       ,, x#7470ea5654831e01ffc04ee0e43a32fb
+       ,, x#90227162dc0faaa14f9627d8f5c718f7
+    | bytesBar | blake3 | strToRow "fdsafdsa"
 
 ;;;;;;;;;;;;;
 ;; Exports ;;

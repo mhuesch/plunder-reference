@@ -1,0 +1,165 @@
+"""
+""" Pads
+""" ====
+"""
+""" A pad is a bit-string encoded as a non-zero nat.
+"""
+""" Pads are not data-jetted, since the direct nat works perfectly.
+"""
+""" Pads are encoded least-significant-bit-first, with the high bit used
+""" to indicate the end of the bit-array.
+"""
+"""     p#""       = 0b1
+"""     p#"00"     = 0b100
+"""     p#"01"     = 0b110
+"""     p#"111000" = 0b1000111
+"""
+""" All of the pad operations coerce their inputs into pads, and always
+""" return pads.
+"""
+""" toPad: Coerces a value into a non-zero natural number.
+"""
+""" padNat: Convert a pad to a nat (dropping all trailining zeros).
+"""
+""" natPad: Convert a nat into a pad with a specific minimum bit-width.
+"""
+""" padWeld: Concatenate two pads
+"""
+""" padCat: Concatenate a row of pads (TODO)
+"""
+""" padCatTree: Concatenate a rose-tree of pads (TODO)
+"""
+""" padIdx: TODO
+""" padGet: TODO
+""" padSet: TODO
+""" padMap: TODO
+"""
+
+""" Imports """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+/+  "01-fan"  [seq]
+/+  "02-bit"  [if]
+/+  "03-nat"  [add mul sub bex dec met lsh]
+/+  "04-app"  [idx len]
+/+  "05-eql"  [eql neq]
+/+  "06-may"  []
+/+  "07-row"  ["," map weld]
+/+  "08-pin"  []
+/+  "09-lis"  [listFromRow listCase]
+/+  "10-eat"  [LEFT RIGHT]
+/+  "11-rex"  [WORD HEIR rexCase]
+/+  "12-com"  []
+/+  "13-sci"  []
+/+  "14-cab"  []
+/+  "15-tab"  []
+/+  "16-chr"  []
+/+  "17-str"  [strToRow]
+/+  "18-exp"  [cnsE]
+/+  "19-hax"  ['#']
+
+
+""" Definitions """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+(toPad x)=(if x x 1)
+
+= (padNat x)
+@ x toPad-x
+| sub x
+| bex | dec met-x
+
+= (padWeld x y)
+@ x toPad-x
+@ y toPad-y
+@ wid (dec met-x)
+| add (sub x bex-wid)
+| lsh y wid
+
+= (natPad n wid)
+@ pid met-n
+| padWeld
+    | add n (bex met-n)
+| bex (sub wid (met n))
+
+(padLen p)=(dec met-p)
+
+
+""" Parsing Pad Literals """""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+= (padFromBinaryStr str)
+@ dig | map eql-"1" strToRow-str
+@ buf | listFromRow weld-dig-[1]
+. 0 buf 1
+? (loop acc lis pos)
+| seq acc
+! listCase lis acc
+& (b bs)
+@ acc | if b (add pos acc) acc
+| loop acc bs (mul 2 pos)
+
+
+""" The `#p` Macro """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+= ("#p" _ _ kids heir)
+@ rexp (HEIR "#" (weld WORD-"#p" kids) heir)
+@ badShape LEFT-[rexp "Expcted two kids and no heir"]
+@ badType  LEFT-[rexp "Bar literal expects a text parameter"]
+@ pram     (idx 0 kids)
+| if (neq 0 heir)     badShape
+| if (neq 1 len-kids) badShape
+! rexCase pram
+  (_ _ _)&badType
+  (bare)&(| RIGHT , 0 | cnsE | padFromBinaryStr bare)
+  (text)&(| RIGHT , 0 | cnsE | padFromBinaryStr text)
+  (page)&(| RIGHT , 0 | cnsE | padFromBinaryStr page)
+  (_)&badType
+
+
+""" Tests """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+?? toPad 0
+?? toPad 1
+?? toPad toPad
+?? eql 3 (toPad 3)
+
+?? eql 01 p#""
+?? eql 02 p#0
+?? eql 04 p#00
+?? eql 08 p#000
+?? eql 16 p#0000
+?? eql 17 p#1000
+?? eql 18 p#0100
+?? eql 20 p#0010
+?? eql 24 p#0001
+?? eql 19 p#1100
+?? eql 21 p#1010
+?? eql 25 p#1001
+?? eql 22 p#0110
+?? eql 26 p#0101
+?? eql 28 p#0011
+?? eql 23 p#1110
+?? eql 27 p#1101
+?? eql 29 p#1011
+?? eql 30 p#0111
+
+?? eql p#0000 (padWeld p#00 p#00)
+?? eql p#1000 (padWeld p#10 p#00)
+?? eql p#0100 (padWeld p#01 p#00)
+?? eql p#0010 (padWeld p#00 p#10)
+?? eql p#0001 (padWeld p#00 p#01)
+?? eql p#1100 (padWeld p#11 p#00)
+?? eql p#1010 (padWeld p#10 p#10)
+?? eql p#1001 (padWeld p#10 p#01)
+?? eql p#0110 (padWeld p#01 p#10)
+?? eql p#0101 (padWeld p#01 p#01)
+?? eql p#0011 (padWeld p#00 p#11)
+?? eql p#1110 (padWeld p#11 p#10)
+?? eql p#1101 (padWeld p#11 p#01)
+?? eql p#1011 (padWeld p#10 p#11)
+?? eql p#0111 (padWeld p#01 p#11)
+
+
+""" Exports """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+^-^ toPad padNat padWeld natPad padLen
+^-^ padFromBinaryStr
+^-^ "#p"

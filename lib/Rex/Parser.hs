@@ -42,31 +42,51 @@ class Rexy a where
   toRex :: a -> R.Rex
 
 instance Rexy Eye where
-  toRex (I t x k) = R.N R.OPEN t (reverse x) k
-  toRex (T f t k) = R.T (if f then R.THIC_LINE else R.THIN_LINE) t k
+  toRex (I t x k) = R.N 0 R.OPEN t (reverse x) k
+  toRex (T f t k) = R.T 0 (if f then R.THIC_LINE else R.THIN_LINE) t k
 
 instance Rexy TFrag where
-  toRex (TRUNE rune)    = R.N R.OPEN rune [] Nothing
+  toRex (TRUNE rune)    = R.N 0 R.OPEN rune [] Nothing
   toRex (TFORM wide)    = formToRex wide
-  toRex (TLINE True t)  = R.T R.THIC_LINE t Nothing
-  toRex (TLINE False t) = R.T R.THIN_LINE t Nothing
+  toRex (TLINE True t)  = R.T 0 R.THIC_LINE t Nothing
+  toRex (TLINE False t) = R.T 0 R.THIN_LINE t Nothing
 
 
 -- Converting Forms into Runic Trees -------------------------------------------
 
 leaf :: Leaf -> R.Leaf
 leaf = \case
-    N n       -> (R.BARE_WORD, n)
-    C True c  -> (R.THIC_CORD, c)
-    C False c -> (R.THIN_CORD, c)
+    N n         -> (R.BARE_WORD, n)
+    C THICK c -> (R.THIC_CORD, c)
+    C THIN  c -> (R.THIN_CORD, c)
+    C CURL  c -> (R.CURL_CORD, c)
 
 formToRex :: Form -> R.Rex
 formToRex = form
  where
   form :: Form -> R.Rex
-  form (BEFO ru bod) = rn R.SHUT_PREFIX ru [form bod]
+  form (BEFO ru bod) = befo ru bod
   form (SHIP i)      = itmz i
-  form (SHIN ru ps)  = rn R.SHUT_INFIX ru (itmz <$> ps)
+  form (SHIN ru ps)  = rn R.SHUT_INFIX ru (itmz<$>ps)
+
+  -- Prefix run binds as tightly as possible:
+  --
+  -- %x,y           == (%x),y)
+  -- +(p)(q)+(r)(s) == (+p)(q)+(r)(s)
+  --
+  befo :: Text -> Form -> R.Rex
+  befo ru f = case f of
+      BEFO{}                -> stick (form f)
+      SHIP (_:|[])          -> stick (form f)
+      SHIP (x:|(i:is))      -> rexAddCont (stick $ item x) (itmz (i:|is))
+      SHIN __ []            -> rn R.NEST_PREFIX ru []     -- invalid edge-case
+      SHIN ir [i]           -> befo ru (BEFO ir (SHIP i)) -- invalid edge-case
+      SHIN ir ((i:|is):j:k) ->
+          form $ SHIN ir ((wrap i :| is):j:k)
+        where
+          wrap = NEST . WRAPD . BEFO ru . SHIP . singleton
+    where
+      stick = rn R.SHUT_PREFIX ru . singleton
 
   nest :: Nest -> R.Rex
   nest (WRAPD f)    = form f
@@ -83,20 +103,22 @@ formToRex = form
   itmz (i :| k:ks) = rexAddCont (item i) (itmz (k:|ks))
 
   item :: Item -> R.Rex
-  item (LEAF (N t))       = R.T R.BARE_WORD t Nothing
-  item (LEAF (C True t))  = R.T R.THIC_CORD t Nothing
-  item (LEAF (C False t)) = R.T R.THIN_CORD t Nothing
+  item (LEAF (N t))       = R.T 0 R.BARE_WORD t Nothing
+  item (LEAF (C THICK t)) = R.T 0 R.THIC_CORD t Nothing
+  item (LEAF (C THIN t))  = R.T 0 R.THIN_CORD t Nothing
+  item (LEAF (C CURL t))  = R.T 0 R.CURL_CORD t Nothing
   item (NEST n)           = nest n
 
-  rn m r cs = R.N m r cs Nothing
+  -- "Rune Node"
+  rn m r cs = R.N 0 m r cs Nothing
 
   rexAddCont :: R.GRex v -> R.GRex v -> R.GRex v
-  rexAddCont (R.T s t Nothing) c    = R.T s t (Just c)
-  rexAddCont (R.T s t (Just k)) c   = R.T s t (Just $ rexAddCont k c)
-  rexAddCont (R.N m r x Nothing) c  = R.N m r x (Just c)
-  rexAddCont (R.N m r x (Just k)) c = R.N m r x (Just $ rexAddCont k c)
-  rexAddCont (R.C x Nothing) c      = R.C x (Just c)
-  rexAddCont (R.C x (Just k)) c     = R.C x (Just $ rexAddCont k c)
+  rexAddCont (R.T _ s t Nothing) c    = R.T 0 s t (Just c)
+  rexAddCont (R.T _ s t (Just k)) c   = R.T 0 s t (Just $ rexAddCont k c)
+  rexAddCont (R.N _ m r x Nothing) c  = R.N 0 m r x (Just c)
+  rexAddCont (R.N _ m r x (Just k)) c = R.N 0 m r x (Just $ rexAddCont k c)
+  rexAddCont (R.C _ x Nothing) c      = R.C 0 x (Just c)
+  rexAddCont (R.C _ x (Just k)) c     = R.C 0 x (Just $ rexAddCont k c)
 
 
 -- Reducing the Eye Stack -----------------------------------------------------
@@ -109,13 +131,11 @@ impossible str = error ("Impossible: " <> str)
 
 type Tok = (Int, TFrag)
 
-toTFrag :: Frag -> TFrag
-toTFrag (RUNE r) = TRUNE r
-toTFrag (FORM f) = TFORM f
-toTFrag (PAGE th p) = TLINE th p
-
 tokenize :: [(Int, Frag)] -> [Tok]
-tokenize = fmap (over _2 toTFrag)
+tokenize = fmap \case
+    (off, RUNE r)    -> (off+(length r - 1), TRUNE r)
+    (off, FORM f)    -> (off, TFORM f)
+    (off, PAGE th p) -> (off+2, TLINE th p)
 
 -- | Add a rex value into an Eye, either as a parameter or as a
 -- continuation, depending on depth.

@@ -1,0 +1,60 @@
+"""
+""" Maybe
+""" =====
+"""
+""" The `Maybe` datatype.
+"""
+"""     data Maybe a = NONE | SOME a
+"""
+""" Pattern matching is generally done by invoking maybeCase inlined:
+"""
+"""     = (mapMaybe f mx)
+"""     ! maybeCase mx NONE
+"""     & x
+"""     | SOME (f x)
+"""
+""" The above inlines down to:
+"""
+"""     (mapMaybe a b)=(if (isNat b) 0 (SOME (a (cdr b))))
+"""
+""" And later on, once the `:` macro has been defined, you can write:
+"""
+"""     = (mapMaybe f mx)
+"""     : x <! maybeCase mx NONE
+"""     | SOME (f x)
+"""
+
+
+""" Imports """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+/+  "01-fan"  [isNat cdr I die]
+/+  "02-bit"  [if]
+/+  "03-nat"  [inc dec]
+/+  "04-app"  []
+/+  "05-eql"  []
+
+
+""" Definitions """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+= NONE     0
+= (SOME x) (0 x)
+
+= (maybeCase opt non som)
+| if isNat-opt non
+! som cdr-opt
+
+(fromSome n x)=(! maybeCase x n I)
+
+
+""" Tests """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+?? maybeCase SOME-0 0 inc
+?? maybeCase SOME-1 0 I
+?? maybeCase SOME-2 0 dec
+?? maybeCase NONE   1 die
+
+
+""" Exports """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+^-^ NONE SOME maybeCase
+^-^ fromSome

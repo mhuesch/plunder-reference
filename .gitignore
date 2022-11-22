@@ -1,7 +1,9 @@
 .stack-work/
 *~
 *.swp
-*.html
 scratch
 plunder.cabal
 TAGS
+.multi
+.ting
+.tmp.sire

@@ -6,7 +6,6 @@ module Rex.TestUtils
     , findGoldenTests
     , langTest
     , dent
-    , whenJust
     , runTest
     )
 where
@@ -62,10 +61,6 @@ dent pre =
     dentLine :: Text -> Text
     dentLine "" = pre
     dentLine ln = pre <> "  " <> ln
-
-whenJust :: Monad m => Maybe a -> (a -> m ()) -> m ()
-whenJust Nothing  _   = pure ()
-whenJust (Just x) act = act x
 
 runTest
     :: GoldPaths

@@ -1,0 +1,9 @@
+/+  boot
+
+= randTest
+. [[1 0 16]]
+? (loop _ _ val)
+| trk [%rand val]
+| loop [[1 0 16]]
+
+<<randTest

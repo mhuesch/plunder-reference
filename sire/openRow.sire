@@ -1,16 +1,4 @@
-/+  either  (LEFT RIGHT eitherOpen)
-/+  nat     (add gte)
-/+  bool    (if ifNot not and or F)
-/+  eql     (eql neq)
-/+  row     (len idx map all)
-/+  list    (listFromRow listCase listZip listEnumFrom)
-/+  cord    (explode isDigit isAlpha cordWeld)
-
-/+  macro   (mergeHeir cnsE rexGetWord rexGetNode rexCase)
-/+  macro   (eitherRowTraverse gensymMacro)
-/+  macro   (gensymE letE varE WORD appE natE NODE)
-
-/+  hax     ("#")
+/+  boot
 
 
 ;;;;;;;;;;;;;;;;;;;;;
@@ -23,8 +11,8 @@
      isDigit-c
 
 = (okaySymbol cord)
-| if (eql 0 cord) F
-@ chars explode-cord
+| if (eql 0 cord) false
+@ chars strToRow-cord
 @ c0 idx-0-chars
 | and (not isDigit-c0)
 | all okaySymbolChar chars
@@ -37,13 +25,12 @@
 
 ; readRowOfName :: Text -> Rex -> Either (Rex, Text) [Text]
 = (readRowOfNames ctx rex)
-; trk %[=ctx =rex]
+; trkVal [%readRowOfNames %[=ctx =rex]]
 @ err
-   | LEFT
-   , rex
-   | cordWeld ctx
-   | " pattern must be a symbol (x) or a row of: (x,y,z)"
-; trk %[=err]
+    | LEFT
+    , rex
+    | strWeld ctx
+    | " pattern must be a symbol (x) or a row of: (x,y,z)"
 ! rexCase rex
          & (rune kids heir)
          ; trk [%node %[=rune =kids =heir]]
@@ -68,6 +55,7 @@
 ;;; no fucks about the aditional edge-case
 
 = (isOpenRowExp rex)
+  """ Is this an open row?
 ! rexGetNode rex 0
 & (rune kids heir)
 | and (gte len-kids 1)
@@ -82,6 +70,21 @@
 | NODE "#" [[1 %openRow] names expr body]
 
 = ("#openRow" env nex xs mK)
+  """
+  """ The {#openRow} macro defines syntax for destructing a row, and
+  """ binding it's elements to names.  For example:
+  """
+  """     # openRow [x y z] [2 3 4]
+  """     | print {x + y + z}
+  """
+  """     openRow#[x y z]#[2 3 4]#(print {x+y+z})
+  """
+  """ The combination of {isOpenRow} and {#openRow} is used to implement
+  """ support for row patterns in the {*} macro.
+  """
+  """     * x,y,z (map (add 2) [3 4 5])
+  """     | print {x + y*z}
+  """
 . env nex xs mK
 | gensymMacro "#openRow" ;; TODO Fix macro interface
    ,, readRowOfNames "In *~ names list,"

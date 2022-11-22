@@ -1,0 +1,130 @@
+"""
+""" The Col Macro
+""" =============
+"""
+""" `:` is a shorthand for a function call where the last argument is
+""" a callback lambda.
+"""
+""" This pattern comes up quite a lot since we don't have do notation.
+"""
+""" You write something like:
+"""
+"""     : (x y z) <- foo x y
+"""     | add x
+"""     | add y z
+"""
+""" And that expands to:
+"""
+"""     - foo x y
+"""     & (x y z)
+"""     | add x
+"""     | add y z
+"""
+""" (Remember that `-` is function application, just like `|`)
+"""
+""" If you use `<!` in place of `<-` then you will get inlining.
+"""
+"""     : x <! eitherCase x (left & die left)
+"""     | add x x
+"""
+""" That expands to:
+"""
+"""     ! eitherCase x (left & die left)
+"""     & x
+"""     | add x x
+"""
+""" Which inlines to:
+"""
+"""     (if car-x (b @ car x)(add b b) (die cdr a))
+"""
+
+/+  "01-fan"  [I]
+/+  "02-bit"  [if and]
+/+  "03-nat"  [div]
+/+  "04-app"  [idx len]
+/+  "05-eql"  [eql neq]
+/+  "06-may"  []
+/+  "07-row"  ["," weld map]
+/+  "08-pin"  []
+/+  "09-lis"  []
+/+  "10-eat"  [RIGHT LEFT eitherCase]
+/+  "11-rex"  ["`" WORD NODE HEIR rexCase rexGetNode]
+/+  "12-com"  []
+/+  "13-sci"  []
+/+  "14-cab"  []
+/+  "15-tab"  []
+/+  "16-chr"  []
+/+  "17-str"  []
+/+  "18-exp"  [eitherRowTraverse readSymbol getSymbol readNodeMerged]
+/+  "19-hax"  []
+/+  "20-pad"  []
+
+
+;;;;;;;;;;;;;;;;;
+;; Definitions ;;
+;;;;;;;;;;;;;;;;;
+
+= (readSignature rex)
+@ mustBe | """Expected `x` or signature `(x y z)`
+@ err    | LEFT [rex mustBe]
+@ node
+    & (rune args cont)
+    @ noCont """name-sequence cannot have a continuation
+    | if (neq rune "|") | err
+    | if (neq cont 0)   | err
+    | eitherRowTraverse readSymbol args
+@ bare
+    & _
+    ! getSymbol rex
+    & res
+    | RIGHT [res]
+! rexCase rex node bare _&err _&err _&err
+
+= (readBinder rex)
+! rexGetNode rex LEFT-[rex "Not a binder"]
+& (rune kids heir)
+| if (and (neq rune "<-") (neq rune "<!"))
+    | LEFT [rex "Expected a <- (or <!) node in : binder"]
+| RIGHT
+, (div rune 256)
+| weld kids
+| if (eql 0 heir) [] [heir]
+
+= (":" envr next kids heir)
+@ rex (HEIR ":" kids heir)
+| if (eql 0 heir)     LEFT-[rex "Heir is required"]
+| if (neq 2 len-kids) LEFT-[rex "Expected two parameters"]
+| readNodeMerged rex [readSignature readBinder RIGHT]
+& (sig mixerKids body)
+@ mixer (idx 0 mixerKids)
+@ kids  (idx 1 mixerKids)
+| RIGHT
+, 0
+| HEIR mixer kids
+| HEIR "&" [(NODE "|" map-WORD-sig)]
+| body
+
+
+;;;;;;;;;;;
+;; Tests ;;
+;;;;;;;;;;;
+
+?? eql RIGHT-[%a %b %c] (readSignature `(a b c))
+?? eql RIGHT-[%a]       (readSignature `a)
+
+= (getRexRune rex k)
+@ err LEFT-[rex "Expected a node"]
+: (rune kids heir) <! rexGetNode rex err
+! k rune
+
+??  : rune <! getRexRune `(3 + 4)
+    | eql rune "+"
+??  : three <- eitherCase (RIGHT 3) I
+    | eql three 3
+
+
+;;;;;;;;;;;;;
+;; Exports ;;
+;;;;;;;;;;;;;
+
+^-^ ":"

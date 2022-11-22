@@ -1,0 +1,65 @@
+"""
+""" Science
+""" =======
+"""
+""" Utilities for inspecting Fan values.
+"""
+""" TODO: Expand this.
+"""
+
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+/+  "01-fan"  [isApp isFun isNat]
+/+  "01-fan"  [car cdr funBody funArgs funName mkFun]
+/+  "02-bit"  [if]
+/+  "03-nat"  []
+/+  "04-app"  [idx]
+/+  "05-eql"  []
+/+  "06-may"  []
+/+  "07-row"  ["," map drop rowApply]
+/+  "08-pin"  []
+/+  "09-lis"  [CONS NIL listToRow]
+/+  "10-eat"  []
+/+  "11-rex"  []
+/+  "12-com"  []
+
+
+""" Definitions """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+= (unApply f args)
+| if isApp-f
+    | unApply car-f
+    | CONS cdr-f args
+| CONS f args
+
+= (inspect x)
+| if isApp-x (| listToRow | unApply car-x | CONS cdr-x NIL)
+| if isFun-x [mkFun funName-x funArgs-x funBody-x]
+| x
+
+= (fullInspection x)
+@ res inspect-x
+| if isNat-res res
+| map fullInspection res
+
+= (runVec exp)
+@ hed idx-0-exp
+@ tel drop-1-exp
+| rowApply hed tel
+
+= (reconstruct spec)
+| if isNat-spec spec
+| runVec map-reconstruct-spec
+
+; %[3=3 4=4]
+; (%[3 4] 4 3)
+; (0 0 3 [3 4] 4 3)
+; (0 0 3 (0 0 3 4 3) 4 3)
+
+
+""" Exports """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+^-^ inspect
+^-^ fullInspection
+^-^ reconstruct
+^-^ unApply

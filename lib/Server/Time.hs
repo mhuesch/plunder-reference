@@ -1,11 +1,12 @@
 module Server.Time where
 
 import PlunderPrelude
-
-import Data.Time.Clock       (NominalDiffTime, nominalDiffTimeToSeconds,
-                              secondsToNominalDiffTime)
-import Data.Time.Clock.POSIX (POSIXTime, getPOSIXTime)
 import Numeric.Natural
+
+import Data.Time.Clock       (NominalDiffTime)
+import Data.Time.Clock       (nominalDiffTimeToSeconds)
+import Data.Time.Clock.POSIX (POSIXTime, getPOSIXTime)
+import Data.Time.Clock       (secondsToNominalDiffTime)
 
 nanosSinceEpoch :: POSIXTime -> Natural
 nanosSinceEpoch = floor . (1e9 *) . nominalDiffTimeToSeconds

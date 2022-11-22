@@ -17,25 +17,9 @@ executables:
     dependencies:
       - plunder
 
-  sire:
+  plunder:
     main: Main.hs
-    source-dirs: exe/sire
-    dependencies:
-      - plunder
-      - rainbow
-      - bytestring
-
-  loot:
-    main: Main.hs
-    source-dirs: exe/loot
-    dependencies:
-      - plunder
-      - rainbow
-      - bytestring
-
-  server:
-    main: Main.hs
-    source-dirs: exe/server
+    source-dirs: exe/plunder
     ghc-options: "-O2 -threaded -rtsopts -with-rtsopts=-N"
     dependencies:
       - plunder
@@ -92,6 +76,8 @@ benchmarks:
       - plunder
 
 dependencies:
+- aeson
+- async
 - base
 - base16-bytestring
 - base58-bytestring
@@ -106,29 +92,39 @@ dependencies:
 - ed25519
 - entropy
 - exceptions
+- focus
 - ghc-prim
 - hashable
 - hashtables
 - heap
+- http-client
+- http-types
 - integer-gmp
+- largeword
 - lmdb
 - megaparsec
 - memory
 - mtl
+- network
 - optics
 - optparse-applicative
 - pretty-show
 - primitive
+- process
 - QuickCheck
-- rainbow
 - random
 - random-shuffle
 - resourcet
+- servant
+- servant-client
+- servant-server
+- stm
 - stm-chans
+- stm-containers
 - stm-delay
 - tasty
-- tasty-quickcheck
 - tasty-golden
+- tasty-quickcheck
 - terminal-size
 - text
 - text-builder
@@ -136,8 +132,14 @@ dependencies:
 - transformers
 - unboxed-ref
 - unix
+- unix-time
 - utf8-string
 - vector
+- wai
+- wai-app-static
+- wai-websockets
+- warp
+- websockets
 
 default-extensions:
 - ApplicativeDo
@@ -152,6 +154,7 @@ default-extensions:
 - DeriveGeneric
 - DeriveTraversable
 - DerivingStrategies
+- DuplicateRecordFields
 - EmptyCase
 - EmptyDataDecls
 - FlexibleContexts
@@ -168,6 +171,7 @@ default-extensions:
 - NoImplicitPrelude
 - NumericUnderscores
 - OverloadedLabels
+- OverloadedRecordDot
 - OverloadedStrings
 - PartialTypeSignatures
 - PatternSynonyms

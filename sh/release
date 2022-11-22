@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+echo 'Usage:' $0 '~/repos/plunder-release'
+
 set -ex
 test $# -eq 1
 target=$1

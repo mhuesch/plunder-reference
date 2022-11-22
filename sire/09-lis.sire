@@ -1,0 +1,272 @@
+"""
+""" Lists
+""" =====
+"""
+""" Just the raw constructors and pattern matches on the List data type:
+"""
+"""     data List a
+"""         = NIL
+"""         | CONS a (List a)
+"""
+""" Pattern matching functions are intended to be inlined to avoid
+""" continuation functions.  For example:
+"""
+"""     = (lhead lis)
+"""     ! listCase lis
+"""         0
+"""     & (x xs)
+"""     (1 x)
+"""
+""" Expands to:
+"""
+"""     = (lhead lis)
+"""     | if isNat-lis 0
+"""     | 1 idx-0-lis
+"""
+
+
+""" Imports """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+/+  "01-fan"  [isNat seq apply supply I]
+/+  "02-bit"  [if ifNot and or true not]
+/+  "03-nat"  [add inc dec mod div lth]
+/+  "04-app"  [idx]
+/+  "05-eql"  [eql neq]
+/+  "06-may"  [NONE SOME fromSome]
+/+  "07-row"  ["," cow foldr tag]
+/+  "08-pin"  []
+
+
+""" Core Datatype """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+= NIL         0
+= (CONS x xs) [x xs]
+
+= (listCase xs nil cons)
+| if isNat-xs nil
+! cons idx-0-xs idx-1-xs
+
+= (listMap f l)
+! listCase l NIL
+& (x xs)
+! CONS f-x listMap-f-xs
+
+(listTurn l f)=(listMap f l)
+
+= (listHead l)
+! listCase l NONE
+& (h _)
+| SOME h
+
+= (listSafeHead fb l)
+! listCase l fb
+& (x _)
+| x
+
+(listUnsafeHead l)=(listSafeHead 0)
+
+
+""" Tests for Core Datatype """"""""""""""""""""""""""""""""""""""""""""""""""""
+
+?? eql NONE   | listHead NIL
+?? eql SOME-3 | listHead (CONS 3 (CONS 4 NIL))
+?? eql 5      | fromSome 4 (SOME 5)
+?? eql 4      | fromSome 4 NONE
+
+
+""" Operations on Lists """"""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+= (listFoldl f z l)
+! listCase l z
+& (x xs)
+@ fzx (f z x)
+| seq fzx
+| listFoldl f fzx xs
+
+= (listFoldr f z l)
+! listCase l z
+& (x xs)
+| f x (listFoldr f z xs)
+
+= (listMap f l)
+! listCase l NIL
+& (x xs)
+! CONS f-x listMap-f-xs
+
+(listTurn l f)=(listMap f l)
+
+= (listLen l)           | listFoldr (x acc & inc acc) 0 l
+= (listSum l)           | listFoldr add 0 l
+= (listToRow l)         | listFoldr supply cow-(listLen l) l
+= (listToRowReversed l) | listFoldl apply cow-(listLen l) l
+= (listFromRow v)       | foldr CONS NIL v
+= (listAnd v)           | listFoldr and true v
+= (listOr v)            | listFoldr or 0 v
+= (listSum v)           | listFoldr add 0 v
+= (listAll f v)         | listAnd listMap-f-v
+= (listAny f v)         | listOr listMap-f-v
+= (listHas e xs)        | listAny eql-e xs
+= (listEnumFrom n)      ! CONS n (listEnumFrom inc-n)
+
+= (listWeld a b)
+! listCase a b
+& (x xs)
+! CONS x (listWeld xs b)
+
+; Lis (Lis a) > Lis a
+= (listCat ls)
+! listCase ls NIL
+& (x xs)
+| listWeld x
+| listCat xs
+
+= (listTake num lis)
+| ifNot num NIL
+! listCase lis NIL
+& (x xs)
+! CONS x
+| listTake dec-num xs
+
+= (listDrop num lis)
+| ifNot num lis
+! listCase lis NIL
+| (x xs & listDrop dec-num xs)
+
+; TODO This does not belong here
+; Convert a nat into a list of digits.
+; TODO: Use `until`?
+= (listDigits num)
+| ifNot num (CONS %0 0)
+. num NIL
+? (loop mor acc)
+| seq acc
+| ifNot mor acc
+@ char (add (mod mor 10) "0")
+@ left (div mor 10)
+| loop left (! CONS char acc)
+
+; Convert a nat into a row of digits.
+= (digits num) (listToRow listDigits-num)
+; TODO This really belongs elsewhere!  Maybe in `sci` or `out`?
+
+= (listZipWith f al bl)
+! listCase al NIL
+& (a as)
+! listCase bl NIL
+& (b bs)
+! CONS f-a-b
+  (listZipWith f as bs)
+
+(listZip a b)=(listZipWith (0 0 3 0) b a)
+
+?? @ expect  ! CONS [3 4] ! CONS [4 5] NIL
+   @ compute | listZip listFromRow-[3 4] listFromRow-[4 5]
+   | eql expect compute
+
+= (listFilter f lis)
+! listCase lis NIL
+& (x xs)
+| if f-x (! CONS x listFilter-f-xs)
+| listFilter f xs
+
+(listNull xs)=(isNat xs)
+
+;; TODO If I implement inline lambdas, can I use a `list` destructuring
+;;      function to generate this same code?  That would be useful
+;;      because I want the pattern matching syntax to be a macro, but
+;;      this part of the code probably comes before the macro
+;;      implementation.
+
+= (listMinimumOn f a bs)
+! listCase bs a
+& (x xs)
+| listMinimumOn f
+    | if (lth f-x f-a) x a
+| xs
+
+= (listGen n f)
+. 0
+? (loop i)
+| if (eql i n) NIL
+| CONS (f i)
+| loop (inc i)
+
+?? eql (listGen 3 I) [0 [1 [2 0]]]
+
+= (listFindIndex f xs)
+. 0 xs
+? (loop ix rest)
+| seq ix
+! listCase rest NONE
+& (x xs)
+| if (f x) (SOME ix)
+| loop (inc ix) xs
+
+(listElemIndex e xs)=(listFindIndex (eql e) xs)
+
+?? eql (0 0) (listElemIndex 0 (, 0 , 1 , 2 , 3 0))
+?? eql (0 1) (listElemIndex 1 (, 0 , 1 , 2 , 3 0))
+?? eql (0 2) (listElemIndex 2 (, 0 , 1 , 2 , 3 0))
+?? eql (0 3) (listElemIndex 3 (, 0 , 1 , 2 , 3 0))
+?? eql 0     (listElemIndex 4 (, 0 , 1 , 2 , 3 0))
+
+= (listSortOn f lis)
+! listCase lis NIL
+& (x xs)
+@ fst | listMinimumOn f x xs
+@ fky | f fst
+@ rst | listSortOn f
+      | listFilter x&(not (eql fky f-x))
+      | lis
+! CONS fst rst
+
+; TODO This is out of place!
+= (sortOn f row)
+| listToRow
+| listSortOn f
+| listFromRow row
+
+(sort row)=(sortOn I row)
+
+(filter f row)=(| listToRow | listFilter f | listFromRow row)
+
+(delete val row)=(filter (neq val) row)
+
+= (findIdxMany f row)
+. NIL tag-row
+| foldr
+& (iv rest)
+| ifNot f-(idx 1 iv) rest
+| CONS (idx 0 iv) rest
+
+(elemIdxMany key row)=(findIdxMany (eql key) row)
+
+?? eql [0 [2 0]] | elemIdxMany 5 [5 0 5]
+
+= (listIntersperse sep lis)
+! listCase lis lis
+& (x xs)
+! listCase xs lis
+& (y ys)
+! CONS x
+! CONS sep
+| listIntersperse sep xs
+
+
+""" Exports """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+^-^ NIL CONS
+^-^ listCase
+^-^ listMap listTurn
+^-^ listHead listSafeHead listUnsafeHead
+^-^
+^-^ listFoldl listFoldr listMap listTurn listLen listSum listToRow
+^-^ listToRowReversed listFromRow listAnd listOr listSum listAll listAny
+^-^ listHas listEnumFrom listWeld listCat listTake listDrop listDigits
+^-^ digits listZipWith listZip listFilter listNull listMinimumOn listSortOn
+^-^ listGen listFindIndex listElemIndex
+^-^ sort sortOn
+^-^ filter delete
+^-^ findIdxMany elemIdxMany
+^-^
+^-^ listIntersperse

@@ -1,0 +1,89 @@
+"""
+""" Pins
+""" ====
+"""
+""" A pin is a data-jet that is always interned.
+"""
+""" In other words, if any two pins are equal then they are also
+""" pointer-equal (they point to the same place in memory).
+"""
+""" Pins are a core building block of the Plunder system, since they
+""" give us a way to chunk input data so that we can use merkle-DAG
+""" approaches to persist and to networking.
+"""
+
+
+""" Imports """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+/+  "01-fan"  [car cdr isNat isFun funBody funArgs]
+/+  "02-bit"  [if not and ifNot]
+/+  "03-nat"  [dec]
+/+  "04-app"  [arity]
+/+  "05-eql"  [eql]
+/+  "06-may"  []
+/+  "07-row"  [","]
+
+
+""" Definitions """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+= (mkPin item)
+@ args arity-item
+| 0 0 args
+. args
+? (go n)
+| ifNot n (2 item)
+| 0 (go dec-n) n
+
+= (pinItem item)
+. funBody-item
+? (go x)
+| if isNat-x 0
+@ hed car-x
+| if isNat-hed cdr-x
+| go cdr-hed
+
+= (isPin p)
+| and isFun-p
+. funArgs-p funBody-p
+? (go n b)
+@ hed car-b
+@ tel cdr-b
+| ifNot n (eql 2 hed)
+| and (eql n tel)
+| and (eql 0 car-hed)
+| go (dec n) cdr-hed
+
+= (checkPin item)
+@ pin (mkPin item)
+| and isPin-pin
+| eql item pinItem-pin
+
+
+""" Tests """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+?? isPin isPin
+?? isPin pinItem
+?? not isPin-(pinItem isPin)
+?? not isPin-(x&x)
+?? not isPin-0
+?? not isPin-(0 0)
+
+?? checkPin 0
+?? checkPin 1
+?? checkPin 2
+?? checkPin 3
+?? checkPin 4
+?? checkPin 5
+?? checkPin (0 0)
+?? checkPin (0 0 0)
+?? checkPin (1 1 1 1)
+?? checkPin (x & x)
+?? checkPin (x y & x)
+?? checkPin (0 0 3 0)
+?? checkPin [3 4 5]
+?? checkPin checkPin
+
+
+""" Exports """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+^-^ mkPin isPin pinItem

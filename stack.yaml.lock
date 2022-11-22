@@ -13,7 +13,7 @@ packages:
     hackage: blake3-0.2@sha256:d1146b9a51ccfbb0532780778b6d016a614e3d44c05d8c1923dde9a8be869045,2448
 snapshots:
 - completed:
-    size: 617368
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/19/3.yaml
-    sha256: a209d3455279ee76eb45f01f73bbb960ceaaa8dfad8891435384689df4dcb653
-  original: lts-19.3
+    size: 617433
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/nightly/2022/7/18.yaml
+    sha256: f2139afc570b01a345b23e3644eb88b3cb43c94ca83454a0abfa9f0476b552e6
+  original: nightly-2022-07-18

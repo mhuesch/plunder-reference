@@ -10,17 +10,28 @@ import Rex
 
 main :: IO ()
 main = colorsOnlyInTerminal do
-    forceOpen <- getArgs <&> \case "--open":_ -> True
-                                   _          -> False
-    let f = if forceOpen then open else id
+    f <- getArgs <&> \case
+        "--open":_ -> forceOpen
+        "--nest":_ -> forceNest
+        _          -> id
+
     replStdin \case
         BLK _ _ (Left err) -> putStrLn (dent "!!" $ err)
         BLK _ _ (Right rx) -> putStrLn (rexFile $ f rx)
 
-open :: Rex -> Rex
-open (N _ r cs k) = N OPEN r (open <$> cs) (open <$> k)
-open (T th t k)   = T th t (open <$> k)
-open (C c _)      = absurd c
+forceOpen :: Rex -> Rex
+forceOpen = go
+  where
+    go (N _ _ r cs k) = N 0 OPEN r (go <$> cs) (go <$> k)
+    go (T _ th t k)   = T 0 th t (go <$> k)
+    go (C _ c _)      = absurd c
+
+forceNest :: Rex -> Rex
+forceNest = go
+  where
+    go (N _ _ r cs k) = N 0 NEST_PREFIX r (go <$> cs) (go <$> k)
+    go (T _ th t k)   = T 0 th t (go <$> k)
+    go (C _ c _)      = absurd c
 
 dent :: Text -> Text -> Text
 dent pre =

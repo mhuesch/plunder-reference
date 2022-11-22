@@ -1,0 +1,123 @@
+"""
+""" The Hax Rune
+""" ============
+"""
+""" This defines the `#` rune, which is a way to define named macros.
+"""
+""" For example, `quote#x` expands by passing `(# x)` to the `#quote`
+""" function.
+"""
+""" This module also defines a handeful of such named macros:
+"""
+""" -   `#quote` is the same as `\``
+"""
+""" -   `#getenv` returns the current global symbol table (as a tab).
+"""
+"""
+""" * * *
+"""
+"""
+""" Here's a quick walk through of what happens when we expand `quote#`:
+"""
+"""     quote#x
+"""
+""" Expands the by passing `(# x)` to the `#quote` function.  Let's say that:
+"""
+"""    (v2 x y)=[x y]
+"""    ("#quote" e n kids heir)=(| RIGHT | v2 0 | EBED | idx 0 kids)
+"""
+""" Then quote#[3 4] is expanded by calling:
+"""
+"""     ($"#quote" env nextGensym [[0 ',' [[1 '3'] [1 '4']]]] 0)
+"""
+""" Which expands to this rex:
+"""
+"""     (1 [0 [4 [0 ',' [[1 '3'] [1 '4']]]]])
+"""
+""" Which evaluates to:
+"""
+"""     [0 ',' [[1 '3'] [1 '4']]]
+"""
+
+""" Imports """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+/+  "01-fan"  []
+/+  "02-bit"  [if ifNot]
+/+  "03-nat"  [lth]
+/+  "04-app"  [len idx]
+/+  "05-eql"  [eql neq]
+/+  "06-may"  []
+/+  "07-row"  ["," drop weld]
+/+  "08-pin"  []
+/+  "09-lis"  []
+/+  "10-eat"  [LEFT RIGHT]
+/+  "11-rex"  [HEIR rexGetWord mergeHeir]
+/+  "12-com"  []
+/+  "13-sci"  []
+/+  "14-cab"  []
+/+  "15-tab"  [look hasKey tabKeys]
+/+  "16-chr"  []
+/+  "17-str"  [strWeld]
+/+  "18-exp"  [cnsE varE]
+
+;; TODO s/hasKey/tabHas/g
+
+
+""" Definitions """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+;;; TODO Handle cases where `x` is not a valid identifier (use one of
+;;; these forms: ($"asdf" $234).
+= (showSymbol x)
+| x
+
+= ("#" envr next kids heir)
+@ rex
+    | HEIR "#" kids heir
+| if (lth len-kids 1)
+    | LEFT [rex "# Macros needs at least on kid"]
+! rexGetWord (idx 0 kids)
+    | LEFT [rex "First parameter to # must be a bare-word"]
+& name
+@ key (strWeld "#" name)
+| ifNot (hasKey key envr)
+    LEFT-[rex (strWeld "Undefined Symbol: " showSymbol-key)]
+@ fun (look envr key)
+| fun envr next (drop 1 kids) heir
+    ;;;
+    ;;; TODO Really need to change the macro interface so that
+    ;;; macros simple receive the whole rexpression they matched on.
+    ;;;
+
+= ("#foo" envr next kids heir)
+| RIGHT [0 (cnsE %[=next =kids =heir])]
+
+= ("#quote" envr next kids heir)
+@ kids (mergeHeir kids heir)
+| if (neq 1 len-kids)
+    @ input (HEIR "#" (weld [varE-"quote"] kids) heir)
+    LEFT-[input "#foo expects exactly one kid (or heir)"]
+| RIGHT [0 (cnsE idx-0-kids)]
+
+= ("#getenv" env nex kids heir)
+| RIGHT [0 cnsE-env]
+
+
+""" Tests """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+(foo#bar)zaz
+
+?? eql (foo#bar)zaz
+    %% =heir [1 %zaz]
+    %% =kids [[1 %bar]]
+    %% =next 0
+
+^-^ "#" ',' eql '#quote' tabKeys '#getenv'
+
+?? eql (tabKeys #getenv) ['#' ',' 'eql' '#quote' 'tabKeys' '#getenv']
+
+
+""" Exports """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+^-^ "#"
+^-^ "#quote"
+^-^ "#getenv"

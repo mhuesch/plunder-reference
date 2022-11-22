@@ -86,10 +86,6 @@ blockRex pax = loop 0
                 C.yield $ BLK lin (T.unlines lns) rex
             loop (lin + length lns)
 
-whenJust :: Monad m => Maybe x -> (x -> m ()) -> m ()
-whenJust Nothing  _ = pure ()
-whenJust (Just x) f = f x
-
 linesBlocks :: Monad m => C.ConduitT Text [Text] m ()
 linesBlocks = loop False []
   where

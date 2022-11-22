@@ -1,0 +1,66 @@
+"""
+""" Double-Comma Macro
+""" ==================
+"""
+""" This implements a tall-form for lists:
+"""
+"""     ?? all isEven
+"""        ,, 0
+"""        ,, 2
+"""        ,, 4
+"""        ,, add 2 4
+"""
+
+
+""" Imports """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+/+  "01-fan"  []
+/+  "02-bit"  [if]
+/+  "03-nat"  []
+/+  "04-app"  []
+/+  "05-eql"  [eql neq]
+/+  "06-may"  []
+/+  "07-row"  ["," null]
+/+  "08-pin"  []
+/+  "09-lis"  [CONS NIL listToRow]
+/+  "10-eat"  [LEFT RIGHT eitherOpen]
+/+  "11-rex"  [rexGetNode NODE HEIR]
+
+
+""" Definitions """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+= (parseOpenRow rex)
+@ fall RIGHT-(CONS rex NIL)
+@ need LEFT-[rex "At least one kid is required"]
+! rexGetNode rex fall
+& (rune kids heir)
+| if (neq ",," rune) fall
+| if (null kids) need
+| if (eql 0 heir)
+    | RIGHT (CONS (NODE "|" kids) NIL)
+! eitherOpen (parseOpenRow heir)
+& rest
+| RIGHT (CONS (NODE "|" kids) rest)
+
+= (",," e n kids heir)
+@ rex (HEIR ",," kids heir)
+! eitherOpen (parseOpenRow rex)
+& list
+| RIGHT (0, NODE "," (listToRow list))
+
+
+""" Tests """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+?? eql [3 4 5] (,, 3)(,, 4)(,, 5)
+?? eql [3 4 5] (,, 3)(,, 4)5
+?? eql [3 4 5] (,,3)(,, 3 3)5
+
+?? eql [3 4 5] ,, 3
+               ,, 4
+               ,, 5
+
+
+""" Exports """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+^-^ ","
+^-^ ",,"

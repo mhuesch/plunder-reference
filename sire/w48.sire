@@ -6,10 +6,7 @@
 ;;; TODO Figure out why this diverges from w32, and if any of those
 ;;; divergencies matter.
 
-/+  bool  (if not xor and or)
-/+  nat   (inc dec add sub mul div mod bex)
-/+  nat   (lth gth lte gte aeq)
-/+  nat   (lsh rsh dis con mix)
+/+  boot
 
 ;;;;;;;;;;;;;;;;;;
 ;; 48-bit Words ;;
@@ -57,7 +54,7 @@ isZero48=not48
 
 = (iDiv48 x y)
 @ res | div48 (iAbs48 x) (iAbs48 y)
-| if (xor (iIsNeg48 x) (iIsNeg48 x))
+| if (xor (iIsNeg48 x) (iIsNeg48 y))
     (iNeg48 res)
 | res
 

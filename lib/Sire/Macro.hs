@@ -21,13 +21,13 @@ cordV = NAT . utf8Nat
 rowV :: [Val v] -> Val v
 rowV = ROW . fromList
 
-loadRow :: Val Pln -> Either (Val Pln, Text) [Val Pln]
+loadRow :: Val Fan -> Either (Val Fan, Text) [Val Fan]
 loadRow (ROW r) = Right (toList r)
 loadRow vl      = Left (vl, "row")
 
 -- Macros ----------------------------------------------------------------------
 
-loadRex :: (Val Pln -> Pln) -> Val Pln -> Either (Val Pln, Text) (GRex Pln)
+loadRex :: (Val Fan -> Fan) -> Val Fan -> Either (Val Fan, Text) (GRex Fan)
 loadRex putVal =
     \node -> loadRow node >>= loadRexRow node
   where
@@ -39,7 +39,7 @@ loadRex putVal =
     loadCord (NAT (natUtf8 -> Right n)) = Right n
     loadCord vl                         = Left (vl, "cord")
 
-    loadRexRow :: Val Pln -> [Val Pln] -> Either (Val Pln, Text) (GRex Pln)
+    loadRexRow :: Val Fan -> [Val Fan] -> Either (Val Fan, Text) (GRex Fan)
     loadRexRow node = \case
         [NAT 0, r, x] -> loadRexRow node [NAT 0, r, x, NAT 0]
         [NAT 1, n]    -> loadRexRow node [NAT 1, n, NAT 0]
@@ -49,15 +49,15 @@ loadRex putVal =
 
         [NAT 0, rv, xsv, mkv] -> do
             rwne <- loadCord rv
-            xs <- toList <$> (loadRow xsv >>= traverse recur)
-            mK <- loadCont mkv
-            pure (N OPEN rwne xs mK)
+            xs   <- toList <$> (loadRow xsv >>= traverse recur)
+            mK   <- loadCont mkv
+            pure (N 0 OPEN rwne xs mK)
 
         -- TODO Change this to match new representation
-        [NAT 1, n, k] -> T BARE_WORD <$> loadName n <*> loadCont k
-        [NAT 2, n, k] -> T THIN_CORD <$> loadCord n <*> loadCont k
-        [NAT 3, p, k] -> T THIN_LINE <$> loadCord p <*> loadCont k
-        [NAT 4, z, k] -> C (putVal z) <$> loadCont k
+        [NAT 1, n, k] -> T 0 BARE_WORD <$> loadName n <*> loadCont k
+        [NAT 2, n, k] -> T 0 THIN_CORD <$> loadCord n <*> loadCont k
+        [NAT 3, p, k] -> T 0 THIN_LINE <$> loadCord p <*> loadCont k
+        [NAT 4, z, k] -> C 0 (putVal z) <$> loadCont k
         NAT n : _     -> Left (node, "Invalid rex node (key=" <> tshow n <> ")")
         _             -> Left (node, "Invalid rex node")
 
@@ -65,19 +65,20 @@ loadRex putVal =
     loadCont mkv     = Just <$> recur mkv
 
 
-rexVal :: GRex Pln -> Val Pln
+rexVal :: GRex Fan -> Val Fan
 rexVal = \case
-    N _ rn xs Nothing      -> rowV[NAT 0, cordV rn, rowV(rexVal<$>xs)]
-    T BARE_WORD n Nothing  -> rowV[NAT 1, cordV n]
-    T THIN_CORD c Nothing  -> rowV[NAT 2, cordV c]
-    T THIN_LINE p Nothing  -> rowV[NAT 3, cordV p]
-    C bed Nothing          -> rowV[NAT 4, REF bed]
+    N _ _ rn xs Nothing      -> rowV[NAT 0, cordV rn, rowV(rexVal<$>xs)]
+    T _ BARE_WORD n Nothing  -> rowV[NAT 1, cordV n]
+    T _ THIN_CORD c Nothing  -> rowV[NAT 2, cordV c]
+    T _ THIN_LINE p Nothing  -> rowV[NAT 3, cordV p]
+    C _ bed Nothing          -> rowV[NAT 4, REF bed]
 
-    N _ rn xs (Just k)     -> rowV[NAT 0, cordV rn, rowV(rexVal<$>xs), rexVal k]
-    T BARE_WORD n (Just k) -> rowV[NAT 1, cordV n, rexVal k]
-    T THIN_CORD c (Just k) -> rowV[NAT 2, cordV c, rexVal k]
-    T THIN_LINE p (Just k) -> rowV[NAT 3, cordV p, rexVal k]
-    C bed (Just k)         -> rowV[NAT 4, REF bed, rexVal k]
+    N _ _ rn xs (Just k)     -> rowV[NAT 0, cordV rn, rowV(rexVal<$>xs), rexVal k]
+    T _ BARE_WORD n (Just k) -> rowV[NAT 1, cordV n, rexVal k]
+    T _ THIN_CORD c (Just k) -> rowV[NAT 2, cordV c, rexVal k]
+    T _ THIN_LINE p (Just k) -> rowV[NAT 3, cordV p, rexVal k]
+    C _ bed (Just k)         -> rowV[NAT 4, REF bed, rexVal k]
 
-    T THIC_CORD c k   -> rexVal (T THIN_CORD c k) -- TODO
-    T THIC_LINE p k   -> rexVal (T THIN_LINE p k)
+    T _ THIC_CORD c k   -> rexVal (T 0 THIN_CORD c k) -- TODO
+    T _ CURL_CORD c k   -> rexVal (T 0 THIN_CORD c k) -- TODO
+    T _ THIC_LINE p k   -> rexVal (T 0 THIN_LINE p k)

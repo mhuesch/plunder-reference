@@ -1,0 +1,65 @@
+"""
+""" Strings
+""" =======
+"""
+""" A `str` is a utf8 string represented as a natural number.
+"""
+""" TODO: Expand this
+"""
+
+
+""" Imports """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+/+  "01-fan"  []
+/+  "02-bit"  [ifNot]
+/+  "03-nat"  [add mul div mod aeq lsh rsh roundUp met takeBits]
+/+  "04-app"  []
+/+  "05-eql"  [eql]
+/+  "06-may"  []
+/+  "07-row"  ["," foldl]
+/+  "08-pin"  []
+/+  "09-lis"  [CONS NIL listFoldl listToRow]
+/+  "10-eat"  []
+/+  "11-rex"  []
+/+  "12-com"  []
+/+  "13-sci"  []
+/+  "14-cab"  []
+/+  "15-tab"  []
+/+  "16-chr"  []
+
+
+""" Definitions """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+(strWeld x y)=(| add x | lsh y | roundUp met-x 8)
+(strCat vs)=(foldl strWeld 0 vs)
+(strTake n c)=(takeBits (mul 8 n) c)
+(strDrop n c)=(rsh c (mul 8 n))
+
+= (strToList s)
+| ifNot s NIL
+| CONS (mod s 256)
+| strToList (div s 256)
+
+(strFromList cs)=(listFoldl strWeld 0 cs)
+
+(strToRow str)=(listToRow strToList-str)
+(strFromRow cs)=(strCat cs)
+
+
+""" Tests """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+?? aeq "fdsa" (strWeld "" "fdsa")
+?? aeq "fdsa" (strWeld "f" "dsa")
+?? aeq "fdsa" (strWeld "fd" "sa")
+
+?? eql [%f]    (strToRow "f")
+?? eql [255]   (strToRow 255)
+?? eql [%f %d] (strToRow "fd")
+
+
+""" Exports """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+^-^  strWeld strCat
+^-^  strTake strDrop
+^-^  strFromList
+^-^  strToRow strFromRow

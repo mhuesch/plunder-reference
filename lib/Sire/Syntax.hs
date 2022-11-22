@@ -3,86 +3,25 @@
 
 {-
 
-Alright, so the longer term plan here, once the Loot codebase stabilizes,
-is to:
-
-    - Remove all printing from this file.
-    - Rely on Loot parser for loot things.
-    - Rely on Loot printer for REPL output.
-    - Remove all the Sugar and move it into macros.
--}
-
-{-
-Inlining
-========
-
-TODO: Implement inlining
-
--   Given a function to inline: (Fun Pln Refr Pln)
--   Given an array of arguments: (Vector (Exp Pln Refr Pln))
--   Presuming that the number of arguments matches the function arity.
--   Return (Exp Pln Refr Pln)
--   Each function argument becomes a let bindings.
--   Function body simply becomes let-binding body.
-
 TODO: Figure how coherent system of runes between Loot and Sire.
 
-TODO: Implement static-application rune.
+Rex Representation in Plunder
+=============================
 
--   Something like [: f x y]
--   Try to convert f and x and y to static values.
--   To do this properly, we need to track all local bindings.  (Do they
-    depend on variables?)
--   Validate that `f` is an inlinable quantity.
--   Validate arity.
--   Perform inlining.
+Representation could be:
 
-TODO: Implement inline binders.
+%fdsa ;; bare_word
 
--   Something like [! f x]=(x x)
--   Same behavior as [f x]=(x x)
--   (Fun Pln Refr Pln) added to "inline table".
--   A compiler pass recognizes application to inline binder, and replaces
-    it with explicit inline-application.
+{rune}
+{rune kids}
+{rune kids cont}
 
-TODO: Implement inline lambdas
+{1 text}
+{1 text style}
+{1 text style cont}
 
--   Something like ((f x &! (x x)) 9)
--   Compiler recognizes application to inline lambda, and replaces with
-    inline-application of normal lambda.
-
-TODO: Implement compile-time-lambda binders.
-
--   Something like [: f x]=(x x)
--   Same behavior as [f x]=(x x)
--   (Fun Pln Refr Pln) added to "static-lambda table".
--   A compiler pass recognizes application to inline binder, and replaces
-    it with explicit compiler-time-application of normal lambda.
-
-TODO: Implement compile-time lambdas.
-
--   Something like ((f x &: x x) 9)
--   Compiler recognizes application to inline lambda, and replaces with
-    compile-time-application of normal lambda.
-
-
-    Rex Representation in Plunder
-    =============================
-
-    Representation could be:
-
-    %fdsa ;; bare_word
-
-    {rune}
-    {rune kids}
-    {rune kids cont}
-
-    {1 text}
-    {1 text style}
-    {1 text style cont}
-
-    {2 embed}
-    {2 embed cont}
+{2 embed}
+{2 embed cont}
 -}
 
 module Sire.Syntax
@@ -99,11 +38,12 @@ import Loot.Types (Val(..), XTag(xtagIdn), xtagTag, LawName(..))
 import Sire.Types
 import Loot.Backend (valPlun, plunVal)
 
-import Loot.Syntax (readIdnTxt, readKey, readSymb, readBymb)
+import Loot.Syntax (readKey, readSymb, readBymb)
 import Loot.Syntax (readArgs, readSigy)
 import Loot.Syntax (readNat)
 import Loot.Syntax (readXTag, simpleTag)
-import Loot.Syntax (rForm1Nc, rFormNc)
+-- ort Loot.Syntax (rForm1Nc, rFormNc)
+import Loot.Syntax (rForm1Nc)
 import Loot.Syntax (rForm2c, rForm1, rForm1c, rFormN1c, rForm3c)
 import Sire.Macro  (rexVal, loadRex, loadRow)
 import Plun.Print  (dent)
@@ -117,8 +57,8 @@ import qualified Loot.ReplExe as Loot
 
 data MacroEnv = MacroEnv
     { meGenSymState :: IORef Nat
-    , meGlobalScope :: Pln
-    , meMacros      :: Map Text Pln
+    , meGlobalScope :: Fan
+    , meMacros      :: Map Text Fan
     }
 
 type MacroExpander v
@@ -130,14 +70,7 @@ type MacroExpander v
 
 type HasMacroEnv = (?macros :: MacroEnv)
 
-type Red = ReadT Pln IO
-
-
--- Printing --------------------------------------------------------------------
-
-eapp :: (XExp, [XExp]) -> XExp
-eapp (f,[])   = f
-eapp (f,x:xs) = eapp (EAPP f x, xs)
+type Red = ReadT Fan IO
 
 
 -- Parsing ---------------------------------------------------------------------
@@ -149,27 +82,45 @@ rexCmd rex =
   preProcess :: Rex -> GRex v
   preProcess = rewriteLeafJuxtaposition . fmap absurd
 
-  load :: GRex Pln -> Either Text XCmd
+  load :: GRex Fan -> Either Text XCmd
   load = Loot.resultEitherText dropEmbed rex
        . runReading readCmd
 
   dropEmbed :: Show v => GRex v -> Rex
   dropEmbed = \case
-      T s t k     -> T s t                    (dropEmbed <$> k)
-      C c k       -> T THIN_CORD (tshow c)    (dropEmbed <$> k)
-      N m r xs mK -> N m r (dropEmbed <$> xs) (dropEmbed <$> mK)
+      T _ s t k     -> T 0 s t                    (dropEmbed <$> k)
+      C _ c k       -> T 0 THIN_CORD (tshow c)    (dropEmbed <$> k)
+      N _ m r xs mK -> N 0 m r (dropEmbed <$> xs) (dropEmbed <$> mK)
 
 -- TODO: Should the parser just handle this directly?
 rewriteLeafJuxtaposition :: GRex a -> GRex a
 rewriteLeafJuxtaposition = go
   where
     go = \case
-      T s t Nothing  -> T s t Nothing
-      T s t (Just x) -> N SHUT_INFIX "-" [T s t Nothing, go x] Nothing
-      N m r p k      -> N m r (go <$> p) (go <$> k)
-      C x k          -> C x (go <$> k)
+      T _ s@THIC_LINE t (Just x) -> multiLine s [t] (Just x)
+      T _ s@THIN_LINE t (Just x) -> multiLine s [t] (Just x)
+      T _ s t Nothing  -> T 0 s t Nothing
+      T _ s t (Just x) -> N 0 SHUT_INFIX "-" [T 0 s t Nothing, go x] Nothing
+      N _ m r p k      -> N 0 m r (go <$> p) (go <$> k)
+      C _ x k          -> C 0 x (go <$> k)
 
-runReading :: Red a -> GRex Pln -> Result Pln a
+    -- TODO Massive hack, figure out a good way to handle this in
+    -- the rex-reader system.
+    multiLine :: TextShape -> [Text] -> Maybe (GRex v) -> GRex v
+    multiLine style acc (Just (T 0 s' t more)) =
+        if (elem s' [THIC_LINE, THIN_LINE]) then
+            multiLine style (t:acc) more
+        else
+            pageIsComment (T 0 s' t more)
+    multiLine _ _ (Just k)      = pageIsComment k
+    multiLine style acc Nothing = T 0 style (unlines $ reverse acc) Nothing
+
+    -- """ This is just the
+    -- """ number nine.
+    --   9
+    pageIsComment = go
+
+runReading :: Red a -> GRex Fan -> Result Fan a
 runReading act = unsafePerformIO . runResultT . runReadT act
 
 withRex :: Red v -> Red (Rex, v)
@@ -177,21 +128,24 @@ withRex red = (,) <$> getRex <*> red
   where
    getRex = fmap (const $ error "impossible") <$> readRex
 
-readImports :: Red [(Text, Set Symb)]
+readModuleName :: Red Text
+readModuleName = Loot.readIdnTxt <|> Loot.readCord
+
+readImports :: Red [(Text, Maybe (Set Symb))]
 readImports = do
     rune "/+"
     asum
-        [ do i <- form1 readIdnTxt
-             pure [(i, mempty)]
-        , do (i,xs) <- form1C readIdnTxt readImports
-             pure ((i,mempty):xs)
-        , do (i,rs) <- form2 readIdnTxt nameList
-             pure [(i, setFromList rs)]
-        , do (i,rs,xs) <- form2C readIdnTxt nameList readImports
-             pure ((i, setFromList rs):xs)
+        [ do i <- form1 readModuleName
+             pure [(i, Nothing)]
+        , do (i,xs) <- form1C readModuleName readImports
+             pure ((i,Nothing):xs)
+        , do (i,rs) <- form2 readModuleName nameList
+             pure [(i, Just (setFromList rs))]
+        , do (i,rs,xs) <- form2C readModuleName nameList readImports
+             pure ((i, Just (setFromList rs)):xs)
         ]
   where
-    nameList = (singleton <$> readKey) <|> (rune "|" >> formN readKey)
+    nameList = (rune "," >> formN readKey)
 
 readFilter :: Red [Symb]
 readFilter = do
@@ -215,35 +169,138 @@ readCmd = asum
     , do rune "<"
          (v,vs) <- form1Nc readExpr readExpr
          pure (DUMPY $ foldl' EAPP v vs)
-    , do rune "<-"
-         let readIdns = rune "," >> form2 readSymb readSymb
-         ((rid,res), exr) <- form2 readIdns readExpr
-         pure (IOEFF rid res exr)
     , SAVEV <$> (rForm1 "<<" readExpr id)
-    , rForm1c "#?" readExpr EPLOD
+    , rForm1c "#?" readExpr XPLODE
     , OUTPUT <$> readExpr
+    , Loot.rForm1 "???" readKey (EFFECT . REQ_FETCH)
+    , rune "!!!" >> asum
+          [ EFFECT . REQ_FETCH  <$> form1 readKey
+          , EFFECT . REQ_SUBMIT <$> form2 readKey readExpr
+          ]
+    , do let binder = Loot.rForm3 "," readKey readKey readKey (,,)
+         let idList = asum [ singleton <$> readKey
+                           , Loot.rFormN "|" readKey setFromList
+                           ]
+         let reqIds = rForm1 "#" idList id
+         Loot.rForm2 "<-" binder reqIds (\b r -> EFFECT (REQ_BLOCK b r))
     ]
   where
     readDefine = do
-        res <- slip2 "=" readBinder readExpr
-        pure $ DEFINE $ res <&> \((t,args),b) ->
+        -- TODO Make this more complicated to accommodate doc-strings.
+        --
+        -- = foo
+        -- """This is docs."
+        -- | fdsafdsa
+        --
+        -- = foo "docs, lol"
+        -- | fdsafdsa
+        --
+        -- = foo
+        --   "docs, lol"
+        -- | fdsafdsa
+        --
+        -- = foo
+        -- "docs, lol"
+        -- | fdsafdsa
+        --
+        res <- readTopBinderSeq
+        pure $ DEFINE $ res <&> \((t,args),c,b) ->
             let nm = xtagIdn t
                 tg = xtagTag t
             in
                 case args of
-                    []   -> BIND_EXP nm b
-                    r:rs -> BIND_FUN nm (FUN nm (LN tg) (r:|rs) b)
+                    []   -> BIND_EXP nm c b
+                    r:rs -> BIND_FUN nm c (FUN nm (LN tg) (r:|rs) b)
+
+{-
+    [[Possible Shapes]]
+        (= f b)
+        (= f "" b)
+        (= f)b
+        (= f "")b
+        (= f b)more
+        (= f "" b)more
+
+    [[3 kids + heir]]
+        (= f c b)more
+            c must always be a docstring
+    [[2 kids w/o heir]]
+        (= f b)
+            no docstring
+    [[1 kids + heir]]
+        (= f)b
+            no docstring
+    [[3 kids w/o heir]]
+        (= f "" b)
+            Must have docstring.
+    [[2 kids + heir]]
+        If heir is `=` rune, then second kid is body
+        Otherwise, second kid is docstring.
+            (= f "")b
+            (= f b)more
+
+    Approach:
+
+        Parse second kid as expression, and the continuation as (EITHER
+        definition OR expression).  If the continuation is an expression,
+        coerce the second kid into a string literal, and error with
+        specific message if it isn't that.
+-}
+readTopBinderSeq
+    :: HasMacroEnv
+    => Red [((XTag, [Symb]), Maybe Text, Exp Fan Symb Symb)]
+readTopBinderSeq = loop
+ where
+  b = readBinder
+  x = readExpr
+  c = readAnyString
+  o = (Right <$> next) <|> (Left <$> readExpr)
+  u = (Right <$> readAnyString) <|> (Left <$> readExpr)
+
+  choice
+      :: (XTag, [Symb])
+      -> Either XExp Text
+      -> Either XExp [((XTag, [Symb]), Maybe Text, Exp Fan Symb Symb)]
+      -> Red [((XTag, [Symb]), Maybe Text, Exp Fan Symb Symb)]
+  choice x1 x2 = \case
+      -- expression (with x2=docstring)
+      Left q ->
+          case x2 of
+              Left{}  -> throwError "Invalid docstring expression"
+              Right d -> pure [(x1,Just d,q)]
+      Right r -> pure ((x1,Nothing,body):r)
+        where
+          body = either id (ENAT . utf8Nat) x2
+
+  next = rune "=" >> loop
+
+  loop = asum [ form3C b c x next >>= \(p, k, q, r) -> pure ((p,Just k,q):r)
+              , form3  b c x      >>= \(p, k, q)    -> pure [(p,Just k,q)]
+              , form2C b u o      >>= \(p, k, e)    -> choice p k e
+              , form2  b x        >>= \(p, q)       -> pure [(p,Nothing,q)]
+              , form1C b x        >>= \(p, q)       -> pure [(p,Nothing,q)]
+              ]
+
+--            , form3c b c x      <&> \(p, k, q)    -> [(p,Just k,q)]
+--            , form3c b c x      <&> \(p, k, q)    -> [(p,Just k,q)]
+--            , form2C b x next   <&> \(p, q, r)    -> (p,Nothing,q):r
+--            , form2c b x        <&> \(p, q)       -> [(p,Nothing,q)]
+
+
+
+readAnyString :: Red Text
+readAnyString = Loot.readCord <|> Loot.readPage
 
 
 -- Functions -------------------------------------------------------------------
 
--- rexPlnRex :: RexColor => GRex Pln -> GRex v
--- rexPlnRex = fmap absurd
+-- rexFanRex :: RexColor => GRex Fan -> GRex v
+-- rexFanRex = fmap absurd
           -- . Loot.joinRex
           -- . fmap Loot.plunRex
 
-valPlnRex :: RexColor => Val Pln -> GRex v
-valPlnRex = fmap absurd
+valFanRex :: RexColor => Val Fan -> GRex v
+valFanRex = fmap absurd
           . Loot.joinRex
           . Loot.valRex
           . Loot.resugarVal mempty
@@ -251,7 +308,7 @@ valPlnRex = fmap absurd
 
 -- TODO Better to just use a parameter instead of IO monad?
 -- TODO This is non-generic now, can we just collapse all this complexity?
-runMacro :: HasMacroEnv => MacroExpander Pln -> Red XExp
+runMacro :: HasMacroEnv => MacroExpander Fan -> Red XExp
 runMacro macro = do
     (xs, mK) <- readNode
     let MacroEnv{..} = ?macros
@@ -287,8 +344,6 @@ readExpr = do
                  , either ECAB ETAB <$> readTab readExpr EREF
                  ]
         , ENAT <$> readNat
-        , Loot.readCow <&> \case 0 -> EVEC mempty
-                                 n -> ECOW n
         , EREF <$> readSymb
         , rFormN1c "."   readExpr readExpr          appTo
         , rForm3c  "@@"  readSymb readExpr readExpr EREC
@@ -302,10 +357,6 @@ readExpr = do
         , rForm1Nc "-"   readExpr readExpr          apple
         , rForm3c  "@"   readSymb readExpr readExpr ELET
         , rForm1Nc "!"   readExpr readExpr          mkInline
-        , rFormNc  ","   readExpr                   EVEC
-        , do rune ",,"
-             sequ <- slip1N ",," readExpr readExpr
-             pure $ EVEC $ fromList $ fmap eapp sequ
         ]
 
     apple f []    = f
@@ -365,7 +416,7 @@ readTab ele var = do
 -- Macros ----------------------------------------------------------------------
 
 -- TODO This can be massivly simplified.
-plunderMacro :: Pln -> MacroExpander Pln
+plunderMacro :: Fan -> MacroExpander Fan
 plunderMacro macroLaw macEnv nex xs mK = do
     let vs  = ROW $ fromList (rexVal <$> xs)
     let kv  = maybe (NAT 0) rexVal mK
@@ -382,31 +433,31 @@ plunderMacro macroLaw macEnv nex xs mK = do
 
 loadMacroExpansion
     :: RexColor
-    => Val Pln
-    -> Either (GRex Pln, Text) (Nat, GRex Pln)
+    => Val Fan
+    -> Either (GRex Fan, Text) (Nat, GRex Fan)
 loadMacroExpansion topVal = case topVal of
     APP (NAT 0) errRow ->
         case loadRow errRow of
             Left (val, le) ->
-                Left (valPlnRex val, loadErr errRow "error context" le)
+                Left (valFanRex val, loadErr errRow "error context" le)
             Right [errExp, NAT err] -> do
                 case (loadRex valPlun errExp, natUtf8Exn err) of
-                    (Left (val, _le), ctx) -> Left (valPlnRex val, ctx)
+                    (Left (val, _le), ctx) -> Left (valFanRex val, ctx)
                     (Right rez, errMsg)   -> Left (rez, errMsg)
                     -- TODO handle invalid error strings more carefully.
             _ -> topBad
     APP (NAT 1) expRow ->
         case loadRow expRow of
             Left (val, le) ->
-                Left (valPlnRex val, loadErr expRow "result" le)
+                Left (valFanRex val, loadErr expRow "result" le)
             Right [NAT used, body] -> do
                 case (loadRex valPlun body) of
-                    Left (val, err) -> Left (valPlnRex val, err)
+                    Left (val, err) -> Left (valFanRex val, err)
                     Right rez -> Right (used, rez)
             _ -> topBad
     _ -> topBad
   where
-    loadErr :: Val Pln -> Text -> Text -> Text
+    loadErr :: Val Fan -> Text -> Text -> Text
     loadErr _val ctx expect = concat
         [ "Error when loading "
         , ctx
@@ -418,7 +469,7 @@ loadMacroExpansion topVal = case topVal of
         unlines
             (["Invalid macro expansion.  Expected " <> expr] <> expLn)
 
-    topBad = Left (valPlnRex topVal, bad "one of:" shapes)
+    topBad = Left (valFanRex topVal, bad "one of:" shapes)
       where
         shapes =
             [ ""
@@ -442,8 +493,8 @@ readOpenTabish :: HasMacroEnv => Red XExp
 readOpenTabish = do
     rex <- readRex
     case rex of
-        N _ "%%" (N _ "=" [_] _ : _) _ -> ETAB <$> readOpenTab
-        _                              -> ECAB <$> Loot.readOpenCab
+        N _ _ "%%" (N _ _ "=" [_] _ : _) _ -> ETAB <$> readOpenTab
+        _                                  -> ECAB <$> Loot.readOpenCab
 
 readOpenTab :: HasMacroEnv => Red (Map Nat XExp)
 readOpenTab = do

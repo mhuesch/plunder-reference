@@ -1,0 +1,107 @@
+"""
+""" Operations on Closures
+""" ======================
+"""
+""" `get`, `idx`, and `len` are primarily intended to be used on vectors
+""" (and their jets are optimized for that use-case).  However, they
+""" work on any closure.
+"""
+
+
+""" Imports """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+/+  "01-fan"  [isApp car seq inc cdr]
+/+  "02-bit"  [if ifNot]
+/+  "03-nat"  [dec aeq]
+
+
+""" Definitions """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+(head non)=(if isApp-non (head car-non) non)
+
+= (arity x)
+@ f (_ a _)&a
+@ a (f _)&(dec arity-f)
+@ n (2 3 (2 4 (2 3 _&1)))
+| 1 f a n x
+
+= (len v)
+. 0 v
+? (go n v)
+| seq n
+| ifNot (isApp v) n
+| go (inc n) (car v)
+
+= (get v i)
+| ifNot (isApp v) 0
+| 2 cdr-v (get car-v) i
+
+= (mut ix vl rw)
+  """
+  """ {mut} modifies the closure {rw}, returning a new closure where
+  """ the {ix}th argument is replaced with {vl}.
+  """
+  """ Remember that the nth element of a closure is counted from the
+  """ right.  For example, {mut 0 %y (f %a %x)} => {f %a %y}
+  """
+| ifNot (isApp rw) rw
+| ifNot ix (car rw vl)
+| mut (dec ix) vl (car rw) (cdr rw)
+
+(idx i v)=(get v i)
+
+
+""" Tests """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+v0=(0 0 1 0)
+(v1 x)=(0 0 2 0 x)
+(v2 x y)=(0 0 3 0 y x)
+
+?? aeq 3 arity-0
+?? aeq 4 arity-1
+?? aeq 3 arity-2
+?? aeq 1 arity-3
+?? aeq 1 arity-4
+?? aeq 1 arity-5
+
+?? arity arity
+?? arity 3
+?? arity 4
+?? arity 0-1-2
+
+?? aeq 2 arity-(0 0)
+?? aeq 3 arity-0
+
+?? cdr (0 0 2 0 1)
+?? cdr (0 0 3 0 2 1)
+?? cdr car-(0 0 3 0 1 2)
+
+?? aeq 0 | len v0
+?? len (v1 0)
+?? aeq 1 | len (v1 0)
+
+?? aeq 2 | len (v2 0 0)
+?? aeq 0 | len 0
+?? aeq 1 | len (0 1)
+
+?? aeq 0 | idx 0 2
+?? aeq 3 | idx 0 (2 3)
+?? aeq 4 | idx 0 (2 3 4)
+?? aeq 3 | idx 1 (2 3 4)
+?? aeq 0 | idx 2 (2 3 4)
+
+?? aeq 0 | idx 0 1
+?? aeq 1 | idx 0 (1 0 1)
+?? aeq 0 | idx 1 (1 0 1)
+?? aeq 0 | idx 2 (1 0 1)
+
+?? aeq 0 | get 1 0
+?? aeq 1 | get (1 0 1) 0
+?? aeq 0 | get (1 0 1) 1
+?? aeq 0 | get (1 0 1) 2
+
+
+""" Exports """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+^-^ head arity len
+^-^ idx mut get

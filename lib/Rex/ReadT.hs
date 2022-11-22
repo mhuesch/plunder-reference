@@ -163,14 +163,14 @@ readResult = READT . const . REST . pure
 
 readNode :: Monad m => ReadT z m ([GRex z], Maybe (GRex z))
 readNode = READT $ \case
-    N _ _ xs mK -> resty $ Success (xs, mK)
-    expr        -> resty $ Expected [(expr, "node")]
+    N _ _ _ xs mK -> resty $ Success (xs, mK)
+    expr          -> resty $ Expected [(expr, "node")]
 
 readExtra :: ∀m z. Monad m => ReadT z m z
 readExtra = READT \case
-    C c Nothing -> REST $ pure $ Success c
-    C _ Just{}  -> error "TODO"
-    rex         -> REST $ pure $ Expected [(rex, "Embeded Value")]
+    C _ c Nothing -> REST $ pure $ Success c
+    C _ _ Just{}  -> error "TODO"
+    rex           -> REST $ pure $ Expected [(rex, "Embeded Value")]
 
 readRex :: Monad m => ReadT z m (GRex z)
 readRex = READT pure
@@ -181,18 +181,18 @@ resty = REST . pure
 rune :: Monad m => Text -> ReadT z m ()
 rune r = READT go
  where
-  go (N _ run _ _) | run==r = resty $ Success ()
-  go expr                   = resty $ Expected [(expr, r)]
+  go (N _ _ run _ _) | run==r = resty $ Success ()
+  go expr                     = resty $ Expected [(expr, r)]
 
 matchLeaf :: Monad m => Text -> (Leaf -> Maybe a) -> ReadT z m a
 matchLeaf expect f = READT \case
-  x@(T s t Nothing) -> resty $ maybe (Expected [(x, expect)]) pure (f (s,t))
-  x                 -> resty $ Expected [(x, expect)]
+  x@(T _ s t Nothing) -> resty $ maybe (Expected [(x, expect)]) pure (f (s,t))
+  x                   -> resty $ Expected [(x, expect)]
 
 matchLeafCont :: Monad m => Text -> (Leaf -> GRex z -> Maybe a) -> ReadT z m a
 matchLeafCont expect f = READT \case
-  x@(T s t (Just k)) -> resty $ maybe (Expected [(x, expect)]) pure (f (s,t) k)
-  x                  -> resty $ Expected [(x, expect)]
+  x@(T _ s t (Just k)) -> resty $ maybe (Expected [(x, expect)]) pure (f (s,t) k)
+  x                    -> resty $ Expected [(x, expect)]
 
 leaf :: Monad m => ReadT z m Leaf
 leaf = matchLeaf "leaf" Just
@@ -206,19 +206,19 @@ matchNameCord :: Monad m => Text -> (Text -> Text -> Maybe a) -> ReadT z m a
 matchNameCord expect f =
     matchLeafCont expect go
   where
-    go (BARE_WORD, n) (T THIN_CORD t Nothing) = f n t
-    go (BARE_WORD, n) (T THIC_CORD t Nothing) = f n t
-    go _              _                       = Nothing
+    go (BARE_WORD, n) (T _ THIN_CORD t Nothing) = f n t
+    go (BARE_WORD, n) (T _ THIC_CORD t Nothing) = f n t
+    go _              _                         = Nothing
 
 matchNameText :: Monad m => Text -> (Text -> Text -> Maybe a) -> ReadT z m a
 matchNameText expect f =
     matchLeafCont expect go
   where
-    go (BARE_WORD, n) (T THIN_CORD t Nothing) = f n t
-    go (BARE_WORD, n) (T THIC_CORD t Nothing) = f n t
-    go (BARE_WORD, n) (T THIN_LINE t Nothing) = f n t
-    go (BARE_WORD, n) (T THIC_LINE t Nothing) = f n t
-    go _              _                       = Nothing
+    go (BARE_WORD, n) (T _ THIN_CORD t Nothing) = f n t
+    go (BARE_WORD, n) (T _ THIC_CORD t Nothing) = f n t
+    go (BARE_WORD, n) (T _ THIN_LINE t Nothing) = f n t
+    go (BARE_WORD, n) (T _ THIC_LINE t Nothing) = f n t
+    go _              _                         = Nothing
 
 matchCord :: Monad m => Text -> (Text -> Maybe a) -> ReadT z m a
 matchCord expect f = matchLeaf expect \case
@@ -234,14 +234,14 @@ matchPage expect f = matchLeaf expect \case
 
 formMatch :: Monad m => (GRex z -> ([GRex z], Maybe (GRex z)) -> ResultT z m c) -> ReadT z m c
 formMatch f = READT \case
-  x@(N _ _ ps mK) -> f x (ps, mK)
-  x               -> resty $ Expected [(x, "expression")]
+  x@(N _ _ _ ps mK) -> f x (ps, mK)
+  x                 -> resty $ Expected [(x, "expression")]
 
 formMatchNoCont :: Monad m => (GRex z -> [GRex z] -> ResultT z m c) -> ReadT z m c
 formMatchNoCont f = READT \case
-  x@(N _ _ ps Nothing) -> f x ps
-  x@(N _ _ _  _)       -> resty $ Expected [(x, "no heir")]
-  x                    -> resty $ Expected [(x, "runic")]
+  x@(N _ _ _ ps Nothing) -> f x ps
+  x@(N _ _ _ _  _)       -> resty $ Expected [(x, "no heir")]
+  x                      -> resty $ Expected [(x, "runic")]
 
 formMatchCont
     :: Monad m

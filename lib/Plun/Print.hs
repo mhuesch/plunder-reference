@@ -5,34 +5,17 @@ module Plun.Print where
 import PlunderPrelude
 
 import Data.ByteString.Base58
-import Rainbow
 
--- TODO Try making the output a single line.  See how long the output would be.
 redOut :: MonadIO m => Text -> m ()
-redOut = liftIO
-       . putChunk
-       . bold
-       . fore red
-       . chunk
-       . (<> "\n")
+redOut t = putStrLn (">>> " <> t <> "\n")
 
 -- TODO Try making the output a single line.  See how long the output would be.
 greenOut :: MonadIO m => Text -> m ()
-greenOut = liftIO
-         . putChunk
-         . bold
-         . fore green
-         . chunk
-         . (<> "\n")
+greenOut t = putStrLn (">> " <> t <> "\n")
 
 -- TODO Try making the output a single line.  See how long the output would be.
 yellowOut :: MonadIO m => Text -> m ()
-yellowOut = liftIO
-          . putChunk
-          . bold
-          . fore yellow
-          . chunk
-          . (<> "\n")
+yellowOut t = putStrLn ("> " <> t <> "\n")
 
 niceLns :: Bool -> [Text] -> Text
 niceLns False []     = "\n"

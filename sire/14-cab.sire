@@ -1,0 +1,88 @@
+"""
+""" Cabs
+""" ====
+"""
+""" A cab is a data-jetted set of natural numbers.
+"""
+
+
+""" Imports """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+/+  "01-fan"  [funArgs funBody inc]
+/+  "02-bit"  [not]
+/+  "03-nat"  [dec]
+/+  "04-app"  [idx len]
+/+  "05-eql"  [eql]
+/+  "06-may"  []
+/+  "07-row"  ["," drop weld has]
+/+  "08-pin"  []
+/+  "09-lis"  [listFromRow sort delete]
+/+  "10-eat"  []
+/+  "11-rex"  []
+/+  "12-com"  []
+/+  "13-sci"  []
+
+
+""" Cabs """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+= (cabIsEmpty cab)
+| eql 1 (funArgs cab)
+
+?? cabIsEmpty %[]
+?? not (cabIsEmpty %[a])
+
+(cabFirst cab)=(idx 0 (funBody cab))
+
+= (cabPop cab)
+@ bod | funBody cab
+@ new | 0 0 (dec (funArgs cab)) (drop 1 bod)
+@ hed | idx 0 bod
+| [hed new]
+
+(cabRow cab)=(funBody cab)
+(cabList cab)=(listFromRow (funBody cab))
+
+= (cabIns itm cab)
+@ bod | sort (weld [itm] (funBody cab))
+@ arg | inc (len bod)
+| 0 0 arg bod
+
+?? eql %[0 1 2 3] (cabIns 3  %[0 1 2])
+?? eql %[a b c]   (cabIns %c %[a b])
+?? eql %[0 1 2 3] (cabIns 3  %[0 1 2 3])
+?? eql %[a b c]   (cabIns %c %[a b c])
+
+= (cabDel itm cab)
+@ bod | delete itm  (funBody cab)
+@ arg | inc (len bod)
+| 0 0 arg bod
+
+?? eql %[0 1 2] | cabDel 3 %[0 1 2 3]
+?? eql %[0 1 3] | cabDel 2 %[0 1 2 3]
+?? eql %[0 2 3] | cabDel 1 %[0 1 2 3]
+?? eql %[1 2 3] | cabDel 0 %[0 1 2 3]
+?? eql %[0 1 2] | cabDel 3 %[0 1 2]
+
+= (cabUnion a b)
+@ bod | sort (weld (funBody a) (funBody b))
+@ arg | inc (len bod)
+| 0 0 arg bod
+
+?? eql %[0 1 2 3] | cabUnion %[0 2]   %[1 3]
+?? eql %[a b c]   | cabUnion %[a c]   %[b]
+?? eql %[a b c]   | cabUnion %[a c]   %[b c]
+?? eql %[a b c]   | cabUnion %[a c]   %[a b c]
+?? eql %[a b c]   | cabUnion %[a b c] %[a b c]
+
+(cabSingleton x)=(cabIns x %[])
+
+?? eql %[3] | cabSingleton 3
+
+= (cabKeys cab)  | funBody cab
+= (cabHas k cab) | has k cabKeys-cab
+
+
+""" Exports """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+^-^ cabIsEmpty cabFirst cabPop cabRow cabList cabIns cabDel cabUnion
+^-^ cabKeys cabHas cabSingleton

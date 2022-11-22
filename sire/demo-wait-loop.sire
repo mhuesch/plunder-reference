@@ -1,0 +1,15 @@
+/+ io
+/+ boot
+
+= (waitLoop k)
+| trk %waitLoop,k
+@ recur mkPin-waitLoop
+: now <- getCurrentTime
+| trk %now,now
+: _ <- waitUntil (add now 1)
+| trk %waited
+| recur k
+
+exe=(newMachine waitLoop)
+
+<<exe

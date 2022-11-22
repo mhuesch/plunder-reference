@@ -38,8 +38,11 @@ module Loot.Syntax
     , readCow
     , rForm1
     , rForm1c
+    , rForm1N
+    , rFormN
     , rFormN1c
     , rForm3c
+    , rForm3
     , rForm2
     , rForm2c
     , rFormNc
@@ -48,17 +51,19 @@ module Loot.Syntax
     , barBox
     , barRex
     , readOpenCab
+    , readPage
     )
 where
 
 import Loot.Types
 import PlunderPrelude
 import Rex
+import Rex.Lexer (isRuneChar)
 
 import Data.ByteString.Builder (byteStringHex, toLazyByteString)
 import Data.Char               (isAlphaNum, isPrint)
 import Data.Text.Encoding      (decodeUtf8')
-import Plun.Types              (lawNameText)
+import Plun                    (lawNameText)
 
 import qualified Data.ByteString.Base16 as B16
 import qualified Data.Char              as C
@@ -83,7 +88,7 @@ leafBox wid rex = BOX wid rex (absurd<$>rex)
 
 wideTextBox :: TextShape -> Text -> Box
 wideTextBox s t =
-    leafBox wid (T s t Nothing)
+    leafBox wid (T 0 s t Nothing)
   where
     wid = length t + (if s==BARE_WORD then 0 else 2)
 
@@ -100,14 +105,14 @@ symbBox symb =
   where
     buk :: Box -> Box
     buk b = leafBox (1 + boxWidth b)
-                    (N SHUT_PREFIX "$" [boxWide b] Nothing)
+                    (N 0 SHUT_PREFIX "$" [boxWide b] Nothing)
 
 
 textBox :: TextShape -> Text -> Box
 textBox style t =
     case (style, wideTextBox style t) of
-      (THIN_LINE, bax) -> bax { boxTall = T THIN_LINE t Nothing }
-      (THIC_LINE, bax) -> bax { boxTall = T THIC_LINE t Nothing }
+      (THIN_LINE, bax) -> bax { boxTall = T 0 THIN_LINE t Nothing }
+      (THIC_LINE, bax) -> bax { boxTall = T 0 THIC_LINE t Nothing }
       (_,         bax) -> bax
 
 pageBox :: TextShape -> [Text] -> Box
@@ -116,9 +121,9 @@ pageBox shape linez =
   where
     wid = (2 * length linez) + sum (length<$>linez)
 
-    go []     = T shape "" Nothing
-    go [l]    = T shape l  Nothing
-    go (l:ls) = T shape l  (Just $ go ls)
+    go []     = T 0 shape "" Nothing
+    go [l]    = T 0 shape l  Nothing
+    go (l:ls) = T 0 shape l  (Just $ go ls)
 
 cordBox :: Text -> Box
 cordBox txt =
@@ -138,12 +143,18 @@ natBox :: Nat -> Box
 natBox n =
   case natUtf8 n of
     Left _                                   -> nameBox (tshow n)
-    Right s | n < 256                        -> nameBox (tshow n)
-            | all isNameChar s && length s>1 -> cenBox s
+    Right s | n==0                           -> nameBox "0"
+            | all trivialChr s && length s>0 -> cenBox s
+            | all isNameChar s && length s>0 -> textBox THIN_CORD s
+            | all isRuneChar s && length s>0 -> textBox THIN_CORD s
+            | n<256                          -> nameBox (tshow n)
             | isLineStr s                    -> textBox THIN_LINE s
             | isBlocStr s                    -> pageBox THIN_LINE (T.lines s)
             | otherwise                      -> nameBox (tshow n)
   where
+    trivialChr '_' = True
+    trivialChr c   = C.isAlpha c
+
     isOkPrint '\n' = False
     isOkPrint '\t' = False
     isOkPrint c    = isPrint c
@@ -160,17 +171,17 @@ natBox n =
 -- XVAPP f x -> niceApp (valRex <$> unXVApp [x] f)
 
 box :: Box -> GRex Box
-box b = C b NONE
+box b = C 0 b NONE
 
 forceBoxOpen :: Box -> Box
 forceBoxOpen =
     \bax -> bax { boxWide = go (boxWide bax) }
   where
     go :: Rex -> Rex
-    go (C joke _)       = absurd joke
-    go x@(N OPEN _ _ _) = x
-    go (N _    "|" p h) = N OPEN "|" p h
-    go x                = N OPEN "|" [x] NONE
+    go (C _ joke _)       = absurd joke
+    go x@(N _ OPEN _ _ _) = x
+    go (N _ _ "|" p h)    = N 0 OPEN "|" p h
+    go x                  = N 0 OPEN "|" [x] NONE
 
 valBox :: XVal -> Box
 valBox = \case
@@ -180,7 +191,7 @@ valBox = \case
     XVLAW l   -> lawBox l
     XVBAR b   -> barBox b
     XVROW r   -> rowBox r
-    XVCOW n   -> nameBox ("R" <> tshow n)
+    XVCOW n   -> nameBox ("C" <> tshow n)
     XVTAB t   -> tabBox t
     XVCAB k   -> cabBox k
 
@@ -189,14 +200,13 @@ valBoxes = \case
     XVAPP f x -> valBox <$> unCell [x] f
     v         -> [valBox v]
 
-
 rowBox :: Vector XVal -> Box
 rowBox row =
     BOX siz wid tal
   where
     tal = if null row then (absurd<$>wid) else
             openSeq ",," (fmap box . valBoxes <$> toList row)
-    wid = N NEST_PREFIX "," (boxWide <$> kid) Nothing
+    wid = N 0 NEST_PREFIX "," (boxWide <$> kid) Nothing
     siz = 1 + length row + sum (boxWidth <$> kid)
     kid = valBox <$> toList row
 
@@ -209,12 +219,12 @@ tabBox tab =
           else 2 + length keySizes + sum keySizes
 
     wid :: Rex
-    wid = N SHUT_PREFIX "%" [N NEST_PREFIX "," wideKeys NONE] NONE
+    wid = N 0 SHUT_PREFIX "%" [N 0 NEST_PREFIX "," wideKeys NONE] NONE
 
     tal :: GRex Box
     tal = openSeq "%%"
         $ turn (mapToList tab) \(k,v) ->
-            let kr = N SHUT_PREFIX "=" [box(keyBox k)] Nothing
+            let kr = N 0 SHUT_PREFIX "=" [box(keyBox k)] Nothing
             in if keyIsValue k v
                then [kr]
                else kr : (box <$> valBoxes v)
@@ -232,9 +242,9 @@ tabBox tab =
         let vb = valBox v
         pure $ if (XVREF k == v)
             then let wd = 1 + boxWidth kb
-                 in (wd, N SHUT_PREFIX "=" (boxWide <$> [kb]) NONE)
+                 in (wd, N 0 SHUT_PREFIX "=" (boxWide <$> [kb]) NONE)
             else let wd = 1 + boxWidth kb + boxWidth vb
-                  in (wd, N SHUT_INFIX "=" (boxWide <$> [kb,vb]) NONE)
+                  in (wd, N 0 SHUT_INFIX "=" (boxWide <$> [kb,vb]) NONE)
 
 
 cabBox :: Set Nat -> Box
@@ -242,9 +252,9 @@ cabBox k =
     BOX width wid tal
   where
     tal = openSeq "%%" (singleton . box <$> keysBox)
-    wid = N SHUT_PREFIX "%" [widKeys] NONE
+    wid = N 0 SHUT_PREFIX "%" [widKeys] NONE
     keysBox = keyBox <$> toList k
-    widKeys = N NEST_PREFIX "," (boxWide <$> keysBox) NONE
+    widKeys = N 0 NEST_PREFIX "," (boxWide <$> keysBox) NONE
     width = 2 + sum (boxWidth <$> keysBox)
 
 barRex :: ByteString -> Rex
@@ -260,21 +270,21 @@ barBox bs =
 
     tx = toStrict $ decodeUtf8 $ toLazyByteString $ byteStringHex bs
 
-    rex = N SHUT_INFIX "#" [ T BARE_WORD pre NONE
+    rex = N 0 SHUT_INFIX "#" [ T 0 BARE_WORD pre NONE
                            , post
                            ] NONE
 
     (wid, (pre, post)) = case (decodeUtf8' bs) of
         Right t | okName t -> ( 2 + length t
-                              , ("b", T BARE_WORD t  NONE)
+                              , ("b", T 0 BARE_WORD t  NONE)
                               )
 
         Right t | okCord t -> ( 4 + length t
-                              , ("b", T THIN_CORD t NONE)
+                              , ("b", T 0 THIN_CORD t NONE)
                               )
 
         _                  -> ( 2 + length tx
-                              , ("x", T BARE_WORD tx NONE)
+                              , ("x", T 0 BARE_WORD tx NONE)
                               )
 
 boxRex :: Box -> Rex
@@ -332,7 +342,7 @@ okIdn txt =
     okIdnChar c   = C.isAlphaNum c
 
 textRex :: TextShape -> Text -> GRex v
-textRex s t = T s t Nothing
+textRex s t = T 0 s t Nothing
 
 nameRex :: Text -> GRex v
 nameRex = textRex BARE_WORD
@@ -340,7 +350,7 @@ nameRex = textRex BARE_WORD
 cenBox :: Text -> Box
 cenBox text = leafBox (length text + 1) rex
   where
-    rex = N SHUT_PREFIX "%" [T BARE_WORD text Nothing] Nothing
+    rex = N 0 SHUT_PREFIX "%" [T 0 BARE_WORD text Nothing] Nothing
 
 {-
 natRex :: Nat -> GRex v
@@ -348,18 +358,18 @@ natRex n = case natUtf8 n of
     Left _                                   -> nameRex (tshow n)
     Right s | n < 256                        -> nameRex (tshow n)
             | all isNameChar s && length s>1 -> wrapCol (nameRex s)
-            | isLineStr s                    -> T THIN_LINE s Nothing
+            | isLineStr s                    -> T 0 THIN_LINE s Nothing
             | isBlocStr s                    -> toLine s
             | otherwise                      -> nameRex (tshow n)
   where
-    wrapCol r = N SHUT_PREFIX "%" [r] Nothing
+    wrapCol r = N 0 SHUT_PREFIX "%" [r] Nothing
 
     toLine :: Text -> GRex v
     toLine = go . T.lines
       where
-        go []     = T THIN_LINE "" $ Nothing
-        go [l]    = T THIN_LINE l  $ Nothing
-        go (l:ls) = T THIN_LINE l  $ Just (go ls)
+        go []     = T 0 THIN_LINE "" $ Nothing
+        go [l]    = T 0 THIN_LINE l  $ Nothing
+        go (l:ls) = T 0 THIN_LINE l  $ Just (go ls)
 
     isOkPrint '\n' = False
     isOkPrint '\t' = False
@@ -413,8 +423,8 @@ boxNode :: Text
 boxNode roon (wStyle, wKids, wHeir) (tKids, tHeir) =
     BOX siz wid tal
   where
-    wid = N wStyle roon (boxWide <$> wKids) (boxWide <$> wHeir)
-    tal = N OPEN   roon (box <$> tKids)     (box <$> tHeir)
+    wid = N 0 wStyle roon (boxWide <$> wKids) (boxWide <$> wHeir)
+    tal = N 0 OPEN   roon (box <$> tKids)     (box <$> tHeir)
     nestSz = 1 + length roon + length wKids + sum (boxWidth <$> wKids)
     siz = case wStyle of
             OPEN        -> nestSz
@@ -461,30 +471,30 @@ unCell acc = \case
     x         -> (x:acc)
 
 parens :: [GRex v] -> GRex v
-parens rexz = N NEST_PREFIX "|" rexz Nothing
+parens rexz = N 0 NEST_PREFIX "|" rexz Nothing
 
 pattern NONE :: Maybe a
 pattern NONE = Nothing
 
 runeSeq :: Text -> [GRex v] -> GRex v
 runeSeq _   []     = error "impossible"
-runeSeq ryn [x]    = N OPEN ryn [x] Nothing
-runeSeq ryn (x:xs) = N OPEN ryn [x] (Just $ runeSeq ryn xs)
+runeSeq ryn [x]    = N 0 OPEN ryn [x] Nothing
+runeSeq ryn (x:xs) = N 0 OPEN ryn [x] (Just $ runeSeq ryn xs)
 
 openSeq :: Text -> [[GRex Box]] -> GRex Box
 openSeq roon = go
   where
-    go []     = N OPEN roon [] Nothing
-    go [x]    = N OPEN roon x Nothing
-    go (x:xs) = N OPEN roon x (Just $ go xs)
+    go []     = N 0 OPEN roon [] Nothing
+    go [x]    = N 0 OPEN roon x Nothing
+    go (x:xs) = N 0 OPEN roon x (Just $ go xs)
 
 simpleAppBox :: [Box] -> Box
 simpleAppBox kids =
     BOX siz wid tal
   where
     siz = 1 + length kids + sum (boxWidth <$> kids)
-    tal = N OPEN        "|" (box <$> kids) Nothing
-    wid = N NEST_PREFIX "|" (boxWide <$> kids) Nothing
+    tal = N 0 OPEN        "|" (box <$> kids) Nothing
+    wid = N 0 NEST_PREFIX "|" (boxWide <$> kids) Nothing
 
 sigBox :: XTag -> (NonEmpty Symb) -> Box
 sigBox n (r:|rs) = simpleAppBox (xtagBox n : fmap symbBox (r:rs))
@@ -508,22 +518,22 @@ xtagBox = \case
               wd = boxWidth nb + 1 + boxWidth tb
   where
     rn :: RuneShape -> Text -> [Box] -> Maybe Box -> GRex Void
-    rn m r k h = N m r (boxWide <$> k) (boxWide <$> h)
+    rn m r k h = N 0 m r (boxWide <$> k) (boxWide <$> h)
 
 joinRex :: GRex (GRex v) -> GRex v
 joinRex = \case
-    T s t k      -> T s t (joinRex <$> k)
-    C c Nothing  -> c
-    C c (Just k) -> rexAddCont c (joinRex k)
-    N m r x k    -> N m r (joinRex <$> x) (joinRex <$> k)
+    T _ s t k      -> T 0 s t (joinRex <$> k)
+    C _ c Nothing  -> c
+    C _ c (Just k) -> rexAddCont c (joinRex k)
+    N _ m r x k    -> N 0 m r (joinRex <$> x) (joinRex <$> k)
 
 rexAddCont :: GRex v -> GRex v -> GRex v
-rexAddCont (T s t Nothing) c    = T s t (Just c)
-rexAddCont (T s t (Just k)) c   = T s t (Just $ rexAddCont k c)
-rexAddCont (N m r x Nothing) c  = N m r x (Just c)
-rexAddCont (N m r x (Just k)) c = N m r x (Just $ rexAddCont k c)
-rexAddCont (C x Nothing) c      = C x (Just c)
-rexAddCont (C x (Just k)) c     = C x (Just $ rexAddCont k c)
+rexAddCont (T _ s t Nothing) c    = T 0 s t (Just c)
+rexAddCont (T _ s t (Just k)) c   = T 0 s t (Just $ rexAddCont k c)
+rexAddCont (N _ m r x Nothing) c  = N 0 m r x (Just c)
+rexAddCont (N _ m r x (Just k)) c = N 0 m r x (Just $ rexAddCont k c)
+rexAddCont (C _ x Nothing) c      = C 0 x (Just c)
+rexAddCont (C _ x (Just k)) c     = C 0 x (Just $ rexAddCont k c)
 
 unXApp :: [XBod] -> XBod -> [XBod]
 unXApp acc = \case
@@ -556,17 +566,17 @@ letBox n v k =
               -- Also, need to check if continuation will be wrapped,
               -- and add 2 if so.
         in
-            (wd, N NEST_INFIX "@" (boxWide <$> kz) (Just $ boxWide kb))
+            (wd, N 0 NEST_INFIX "@" (boxWide <$> kz) (Just $ boxWide kb))
 
-    tal = N OPEN "@" (box <$> [symbBox n, bodBox v])
-                     (Just $ boxCont $ bodBox k)
+    tal = N 0 OPEN "@" (box <$> [symbBox n, bodBox v])
+                       (Just $ boxCont $ bodBox k)
 
 boxCont :: Box -> GRex Box
 boxCont = box . forceBoxOpen
 
 bodApply :: [XBod] -> Box
 bodApply exprs =
-    case (sum widths < 60, reverse boxes) of
+    case (sum widths < 40, reverse boxes) of
       (True, _)    -> boxApply boxes
       (False, oll) -> case span (\x -> boxWidth x < 10) oll of
                           ([], _) -> boxApply boxes
@@ -581,11 +591,11 @@ dotBox args body =
     foo { boxTall = tal }
   where
     foo = boxApply (body <> args)
-    tal = N OPEN "." (box <$> args) (Just $ box $ boxApply body)
+    tal = N 0 OPEN "." (box <$> args) (Just $ box $ boxApply body)
 
 boxApply :: [Box] -> Box
-boxApply []    = BOX 2 (N NEST_PREFIX "|" [] Nothing)
-                       (N NEST_PREFIX "|" [] Nothing)
+boxApply []    = BOX 2 (N 0 NEST_PREFIX "|" [] Nothing)
+                       (N 0 NEST_PREFIX "|" [] Nothing)
 boxApply [bix] = bix
 boxApply boxes =
     BOX siz wid tal
@@ -596,17 +606,26 @@ boxApply boxes =
     barSz = 1 + length boxes + sum (boxWidth<$>boxes)
 
     (siz, wid) =
-        if all simple rexz
-        then (hepSz, N SHUT_INFIX  "-" rexz Nothing)
-        else (barSz, N NEST_PREFIX "|" rexz Nothing)
+        case rexz of
+          [f,_] | isPrim f ->
+               (hepSz, N 0 SHUT_INFIX  "-" rexz Nothing)
+          _ | all simple rexz ->
+               (hepSz, N 0 SHUT_INFIX  "-" rexz Nothing)
+          _ ->
+               (barSz, N 0 NEST_PREFIX "|" rexz Nothing)
 
-    simple (T BARE_WORD _ Nothing) = True
-    simple _                       = False
+    isPrim (T _ BARE_WORD "0" Nothing) = True
+    isPrim (T _ BARE_WORD "1" Nothing) = True
+    isPrim (T _ BARE_WORD "2" Nothing) = True
+    isPrim _                           = False
+
+    simple (T _ BARE_WORD _ Nothing) = True
+    simple _                         = False
 
     tal = case reverse boxes of
-        []     -> N OPEN "|" [] Nothing
-        [x]    -> N OPEN "|" [C x NONE] Nothing
-        k:l:sx -> N OPEN "|" (box <$> reverse (l:sx))
+        []     -> N 0 OPEN "|" [] Nothing
+        [x]    -> N 0 OPEN "|" [C 0 x NONE] Nothing
+        k:l:sx -> N 0 OPEN "|" (box <$> reverse (l:sx))
                              (Just $ box $ forceBoxOpen k)
 
 
@@ -615,8 +634,8 @@ boxPrefix roon expr =
     BOX siz wid tal
   where
     siz = length roon + boxWidth expr -- TODO Unless it needs to be (wrapped).
-    wid = N SHUT_PREFIX roon [boxWide expr] NONE
-    tal = N OPEN        roon [box expr]     NONE
+    wid = N 0 SHUT_PREFIX roon [boxWide expr] NONE
+    tal = N 0 OPEN        roon [box expr]     NONE
 
 boxShutInfix :: Text -> [Box] -> Box
 boxShutInfix roon exprs =
@@ -626,7 +645,7 @@ boxShutInfix roon exprs =
             []  -> 2 + length roon              -- fallback to nest prefix
             [x] -> 3 + length roon + boxWidth x -- fallback to nest prefix
             xs  -> length roon * (length xs - 1) + sum (boxWidth<$>xs)
-    wid = N SHUT_INFIX roon (boxWide <$> exprs) NONE
+    wid = N 0 SHUT_INFIX roon (boxWide <$> exprs) NONE
     tal = runeSeq roon (box <$> exprs)
 
 -- TODO Hack for printing in ReplExe -------------------------------------------
@@ -637,7 +656,7 @@ xtagApp t as = parens (xtagRex t : fmap symbRex (toList as))
 xtagRex :: XTag -> Rex
 xtagRex = \case
     XTAG n Nothing  -> keyRex n
-    XTAG n (Just t) -> N SHUT_INFIX "$" [keyRex n, keyRex t] NONE
+    XTAG n (Just t) -> N 0 SHUT_INFIX "$" [keyRex n, keyRex t] NONE
 
 keyRex :: Symb -> Rex
 keyRex = boxWide . keyBox
@@ -650,7 +669,7 @@ symbRex symb =
         (_, Right nm) | okTxt nm -> buk (cordRex nm)
         _                        -> buk (nameRex (tshow symb))
   where
-    buk n = N SHUT_PREFIX "$" [n] Nothing
+    buk n = N 0 SHUT_PREFIX "$" [n] Nothing
     cordRex = boxWide . cordBox
 
 -- Parsing ---------------------------------------------------------------------
@@ -763,8 +782,8 @@ readOpenTabish :: Red v XVal
 readOpenTabish = do
     rex <- readRex
     case rex of
-        N _ "%%" (N _ "=" [_] _ : _) _ -> readOpenTab
-        _                              -> XVCAB <$> readOpenCab
+        N _ _ "%%" (N _ _ "=" [_] _ : _) _ -> readOpenTab
+        _                                  -> XVCAB <$> readOpenCab
 
 readOpenTab :: Red v XVal
 readOpenTab = do
@@ -849,6 +868,12 @@ rForm1c r x k = rune r >> form1c x >>= \a -> pure (k a)
 rForm1 :: Text -> Red v a -> (a -> b) -> Red v b
 rForm1 r x k = rune r >> form1 x >>= \a -> pure (k a)
 
+rFormN :: Text -> Red v a -> ([a] -> b) -> Red v b
+rFormN r x k = rune r >> formN x >>= \a -> pure (k a)
+
+rForm1N :: Text -> Red v a -> Red v b -> (a -> [b] -> c) -> Red v c
+rForm1N r x y k = rune r >> form1N x y >>= \(a,b) -> pure (k a b)
+
 rFormNc :: Text -> Red v a -> ([a] -> b) -> Red v b
 rFormNc r x k = rune r >> formNc x >>= \a -> pure (k a)
 
@@ -859,6 +884,10 @@ rForm3c :: Text -> Red v a -> Red v b -> Red v c -> (a -> b -> c -> d)
         -> Red v d
 rForm3c r x y z k = rune r >> form3c x y z >>= \(a,b,c) -> pure (k a b c)
 
+rForm3 :: Text -> Red v a -> Red v b -> Red v c -> (a -> b -> c -> d)
+       -> Red v d
+rForm3 r x y z k = rune r >> form3 x y z >>= \(a,b,c) -> pure (k a b c)
+
 rForm2 :: Text -> Red v a -> Red v b -> (a -> b -> c) -> Red v c
 rForm2 r x y k = rune r >> form2 x y >>= \(a,b) -> pure (k a b)
 
@@ -867,10 +896,10 @@ rForm1Nc r x y k = rune r >> form1Nc x y >>= \(a,bs) -> pure (k a bs)
 
 
 readCow :: Red v Nat
-readCow = matchLeaf "R[0-9]+" \case
-    (BARE_WORD, "R0") -> Just 0
+readCow = matchLeaf "C[0-9]+" \case
+    (BARE_WORD, "C0") -> Just 0
 
-    (BARE_WORD, (unpack -> ('R' : n : ns))) -> do
+    (BARE_WORD, (unpack -> ('C' : n : ns))) -> do
         guard (all C.isDigit (n:ns))
         guard (n /= '0')
         readMay (n:ns)
@@ -976,8 +1005,8 @@ readCord = matchLeaf "cord" \case
     (THIC_CORD,t) -> Just t
     _             -> Nothing
 
-readLine :: Red v Text
-readLine = matchLeaf "page" \case
+readPage :: Red v Text
+readPage = matchLeaf "page" \case
     (THIC_LINE,l) -> Just l
     (THIN_LINE,l) -> Just l
     _             -> Nothing
@@ -990,7 +1019,7 @@ readNat :: Red v Nat
 readNat =
     readNumb <|> readColn <|> readTape <|> line
   where
-    line = utf8Nat <$> readLine
+    line = utf8Nat <$> readPage
     readTape = utf8Nat <$> readCord
     readColn = rune "%" >> form1 (utf8Nat <$> readName)
 
@@ -1002,7 +1031,7 @@ readNumb =
         _     -> readMay (filter (/= '_') n)
 
 readAnyText :: Red v Text
-readAnyText = (readName <|> readCord <|> readLine)
+readAnyText = (readName <|> readCord <|> readPage)
 
 -- TODO Use x#_ and b#_ syntax
 readBar :: Red v ByteString

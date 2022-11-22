@@ -1,0 +1,47 @@
+"""
+""" Characters
+""" ==========
+"""
+""" TODO Expand this
+"""
+
+
+""" Imports """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+/+  "01-fan"  []
+/+  "02-bit"  [and or not]
+/+  "03-nat"  [gte lte]
+/+  "04-app"  []
+/+  "05-eql"  []
+/+  "06-may"  []
+/+  "07-row"  []
+/+  "08-pin"  []
+/+  "09-lis"  []
+/+  "10-eat"  []
+/+  "11-rex"  []
+/+  "12-com"  []
+/+  "13-sci"  []
+/+  "14-cab"  []
+/+  "15-tab"  []
+
+
+""" Definitions """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+(isDigit c)=(and (gte c '0') (lte c '9'))
+(isUpper c)=(and (gte c 'A') (lte c 'Z'))
+(isLower c)=(and (gte c 'a') (lte c 'z'))
+(isAlpha c)=(or isUpper-c isLower-c)
+
+
+""" Tests """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+?? isLower 'c'
+?? isUpper 'C'
+?? not (isAlpha '0')
+?? isDigit '0'
+?? not (isDigit 'a')
+
+
+""" Exports """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+^-^  isDigit isUpper isLower isAlpha
