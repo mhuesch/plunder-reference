@@ -67,8 +67,6 @@ F=0
 ?? not (if 0 1 0)
 
 ?? if if 0 1
-
-?? if if 0 1
 ?? not (if if 1 0)
 
 ;; TODO Need some external tests in order to truly capture the behavior.
