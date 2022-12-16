@@ -1152,6 +1152,7 @@ executeLaw self pro@PROG{prgrm,stkSz} args =
   where
     envSize = sizeofSmallArray args
 
+    go :: SmallMutableArray RealWorld Fan -> Run -> IO Fan
     go vs = \case
         CNS v  -> pure v
         ARG 0  -> pure self
