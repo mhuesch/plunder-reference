@@ -57,8 +57,8 @@ vJetImpl = unsafePerformIO (newIORef mempty)
 
 matchJetsToHash
     :: Map Text ByteString
-    -> [(Text, Exe->Exe)]
-    -> [(Text, Exe->Exe, ByteString)]
+    -> [(Text, Jet)]
+    -> [(Text, Jet, ByteString)]
 matchJetsToHash tab =
     mapMaybe \(t,x) -> do
         bs <- case lookup t tab of
@@ -68,12 +68,12 @@ matchJetsToHash tab =
                       Nothing
         pure (t,x,bs)
 
-table :: [(Text, (Exe -> Exe), ByteString)]
+table :: [(Text, Jet, ByteString)]
 table = unsafePerformIO do
     matchJetsToHash <$> readIORef vJetHash
                     <*> (mapToList <$> readIORef vJetImpl)
 
-jetsByHash :: Map ByteString (Text, Exe -> Exe)
+jetsByHash :: Map ByteString (Text, Jet)
 jetsByHash = mapFromList (table <&> \(n,f,h) -> (h,(n,f)))
 
 allJetNames :: Set Text
