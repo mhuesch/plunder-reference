@@ -1209,6 +1209,7 @@ executeLaw self pro@PROG{prgrm,stkSz} args =
         REC xs -> do
             !buf <- newSmallArray envSize self
             let !nxs = (envSize-1)
+                -- TODO mhueschen: is this off by 1?
                 fill i = unless (i==nxs) do
                              v <- go vs (xs^i)
                              writeSmallArray buf (i+1) v
