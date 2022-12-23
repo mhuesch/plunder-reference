@@ -1099,15 +1099,14 @@ ugly nat =
 
 compileLaw :: LawName -> Nat -> Fan -> Prog
 compileLaw _lNam numArgs lBod =
-    let (a,b) = (numArgs, lBod)
-        (maxRef, code) = go a b
-        run = tailOptimize $ fullOptimize $ (optizolve (natToArity a) code)
+    let (maxRef, code) = go numArgs lBod
+        run = tailOptimize $ fullOptimize $ (optizolve (natToArity numArgs) code)
     in
        -- trace ( unpack (ugg n) <> "  :=  " <> show code <> "\n\n" <>
        --         unpack (ugg n) <> " ::== " <> show run <> "\n"
        --       )
        -- trace (unpack (ugg n) <> " := " <> show run <> "\n")
-       PROG (fromIntegral a)
+       PROG (fromIntegral numArgs)
             (fromIntegral maxRef + 1)
             run
   where
