@@ -64,6 +64,7 @@ tests:
   sire-tests:
     source-dirs: exe/sire-tests
     main: Main.hs
+    ghc-options: "-threaded"
     dependencies:
       - plunder
 
